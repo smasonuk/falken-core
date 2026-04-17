@@ -1,0 +1,16 @@
+name: web
+description: Tools for gathering external knowledge.
+requested_permissions: {}
+tools:
+  - name: fetch_url
+    description: Downloads and reads external documentation or web pages.
+    always_load: false
+    keywords: [http, download, documentation, internet]
+    parameters:
+      type: object
+      properties:
+        URL:
+          type: string
+          description: The URL to fetch.
+      required:
+        - URL

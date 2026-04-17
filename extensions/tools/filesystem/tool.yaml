@@ -1,0 +1,225 @@
+name: filesystem
+description: A suite of core filesystem tools.
+requested_permissions: {}
+tools:
+  - name: read_file
+    description: |-
+      Reads a file from the local filesystem.
+      
+      CRITICAL USAGE RULES:
+      - Line Numbers: Results always include line numbers prepended (e.g., '1 | code'), including full-file reads. Pay close attention to these numbers, as you will need them to use the 'edit_file' tool accurately.
+      - File Size Limits: By default, this tool reads the entire file. However, if the file is larger than 500 lines, the output will be truncated to protect your context window.
+      - Targeted Reading: For large files, you MUST use the 'StartLine' and 'EndLine' parameters to read specific, targeted sections instead of re-reading the whole file.
+      - Files Only: This tool can only read files, not directories. To read a directory, use the 'execute_command' tool with 'ls' or the 'glob' tool.
+      - Error Handling: If you misspell a filename, the tool may suggest a similar existing file. If you read an empty file, you will receive a <system-reminder> warning.
+    always_load: true
+    parameters:
+      type: object
+      properties:
+        Path:
+          type: string
+          description: The absolute or relative path to the file you want to read.
+        StartLine:
+          type: integer
+          description: Optional. The line number to start reading from. Highly recommended for large files.
+        EndLine:
+          type: integer
+          description: Optional. The line number to end reading at. Highly recommended for large files.
+      required:
+        - Path
+
+  - name: read_files
+    description: |-
+      Reads multiple files from the local filesystem in one call.
+
+      CRITICAL USAGE RULES:
+      - Read First: Use this when you need a small set of files together without spending extra round trips.
+      - Output Format: Each file is wrapped in a `--- FILE: path ---` header and its contents are line-numbered, matching `read_file`.
+      - Files Only: This tool reads files, not directories.
+      - Edit Guardrail: Successfully read files are marked as read for subsequent `edit_file` and `multi_edit` operations.
+    always_load: true
+    parameters:
+      type: object
+      properties:
+        Paths:
+          type: array
+          description: A non-empty list of absolute or relative file paths to read.
+          items:
+            type: string
+      required:
+        - Paths
+
+  - name: write_file
+    description: |-
+      Writes complete text content to a specified file.
+
+      CRITICAL USAGE RULES:
+      - Full Overwrite: This tool replaces the entire file. You MUST provide the full file content. Never use placeholders like '// rest of code' or partial snippets.
+      - Prefer using the edit_file tool - If you are modifying modifying parts of a file use the edit_file tool instead. 
+      - Automatic Backups: The tool automatically creates a backup of existing files before overwriting. Do not waste steps creating manual backups.
+      - Diff Verification: The tool returns a diff showing your exact changes. Review this diff to ensure you haven't accidentally deleted or broken existing code.
+      - File Creation: If the specified path does not exist, the tool will automatically create a new file.
+    always_load: true
+    parameters:
+      type: object
+      properties:
+        Path:
+          type: string
+        Content:
+          type: string
+      required:
+        - Path
+        - Content
+
+  - name: edit_file
+    description: |
+      Replaces a contiguous block of code in a single file with new code.
+        
+      CRITICAL USAGE RULES:
+      1. Read First: You MUST use the `read_file` tool to read the file before attempting an edit. Do not guess the file's contents.
+      2. Exact Whitespace: `OldString` must match the file's contents EXACTLY, including all original indentation, spaces, and tabs.
+      3. Uniqueness: The edit will FAIL if `OldString` is not unique in the file. Always provide 2-4 lines of surrounding context to make it uniquely identifiable.
+      4. Global Renaming: If you want to rename a variable or replace a string across the entire file, set `ReplaceAll` to true.
+      5. When to Use: Ideal for a single, targeted block replacement in one specific file.
+      6. When NOT to Use: If you need to edit multiple files, or make multiple disconnected changes in the same file, DO NOT call this tool multiple times. Use `multi_edit` or `apply_patch` instead to execute all changes in a single step.
+    always_load: true
+    parameters:
+      type: object
+      properties:
+        Path:
+          type: string
+          description: The relative or absolute path of the file to edit.
+        OldString:
+          type: string
+          description: The exact, contiguous block of existing code to be replaced. Must match the file's contents exactly, including whitespace.
+        NewString:
+          type: string
+          description: The new code that will replace OldString.
+        ReplaceAll:
+          type: boolean
+          description: Optional. If true, replaces all occurrences of OldString with NewString. Defaults to false.
+      required:
+        - Path
+        - OldString
+        - NewString
+
+  - name: multi_edit
+    description: |-
+      Executes multiple file edits in a single operation, vastly improving efficiency for cross-file refactors.
+      
+      CRITICAL USAGE RULES:
+      1. Read First: You MUST use the `read_file` tool to read all target files before attempting to edit them. Do not guess contents.
+      2. Exact Whitespace: Every `OldString` must match the file's contents EXACTLY, including all original indentation, spaces, and tabs.
+      3. Uniqueness: An edit will FAIL if `OldString` is not unique within its respective file. Always provide 2-4 lines of surrounding context to guarantee a unique match.
+      4. When to Use: Ideal for renaming variables across multiple files, updating function signatures and their call sites simultaneously, or applying several targeted changes to a single file without rewriting the whole file.
+      5. When NOT to Use: Do not use this for complete file rewrites (use `write_file`) or massive multi-chunk refactors (use `apply_patch`).
+    always_load: true
+    parameters:
+      type: object
+      properties:
+        Edits:
+          type: array
+          description: A list of edit operations.
+          items:
+            type: object
+            properties:
+              Path:
+                type: string
+                description: The relative or absolute path of the file to edit.
+              OldString:
+                type: string
+                description: The exact, contiguous block of existing code to be replaced.
+              NewString:
+                type: string
+                description: The new code that will replace OldString.
+            required:
+              - Path
+              - OldString
+              - NewString
+      required:
+        - Edits
+
+  - name: apply_patch
+    description: |-
+      Applies a standard Unified Diff patch to files in the repository.
+      
+      CRITICAL USAGE RULES:
+      1. Format: The `PatchText` must be a perfectly valid Unified Diff (standard git diff format). You MUST include the standard `--- a/filepath` and `+++ b/filepath` headers for every file modified.
+      2. Context Lines: Ensure your diff includes about 3 lines of unchanged context above and below the modified lines. The patching engine uses these to safely anchor your changes.
+      3. When to Use: Extremely useful for complex architectural changes, modifying many disparate chunks in a single file, or making large multi-file feature additions in a single turn. 
+      4. When NOT to Use: Do not use for simple single-block edits—use `edit_file` or `multi_edit` instead, as they are faster and less prone to strict formatting errors.
+      5. File Paths: Ensure the file paths in the diff headers exactly match the target repository paths.
+    always_load: true
+    parameters:
+      type: object
+      properties:
+        PatchText:
+          type: string
+          description: The raw unified diff text to apply. Must include standard diff headers and context lines.
+      required:
+        - PatchText
+
+  - name: glob
+    description: |-
+      Fast file pattern matching tool that works with any codebase size
+      - Supports glob patterns like "**/*.js" or "src/**/*.ts"
+      - Returns matching file paths sorted by modification time
+      - Use this tool when you need to find files by name patterns
+      - When you are doing an open ended search that may require multiple rounds of globbing and grepping, use the 'agent' tool instead
+    always_load: true
+    parameters:
+      type: object
+      properties:
+        Pattern:
+          type: string
+          description: The glob pattern to match.
+      required:
+        - Pattern
+
+  - name: grep
+    description: |
+      A powerful regex search tool optimized for exploring codebases safely and efficiently.
+      Usage & Best Practices:
+      - ALWAYS use this tool for search tasks. NEVER invoke `grep` or `rg` as a bash command, as this tool prevents context window overflow and respects system ignore lists.
+      - Output Modes: Use `files_with_matches` for broad exploratory searches to find WHICH files contain a term. Use `content` (default) to see the actual matching lines.
+      - Glob Filtering: Use the `Glob` parameter (e.g., "*.js", "**/*.go") to narrow your search to specific file types or directories in a single tool call, avoiding the need to run the separate 'glob' tool first.
+      - Pagination: Results are truncated to protect your context window. If you see a "[TRUNCATED]" or limit warning, use the `Limit` and `Offset` parameters to paginate through the remaining results.
+      - Surrounding Context: When in `content` mode, use `Before`, `After`, or `Context` (maximum 10) to retrieve the lines immediately surrounding a match. This is crucial for understanding the logic around a matched variable or function.
+      - Regex Syntax: Uses standard Go (RE2) regex syntax.
+    always_load: true
+    parameters:
+      type: object
+      properties:
+        Regex:
+          type: string
+          description: The regex pattern to search for.
+        TargetPaths:
+          type: array
+          description: A list of file paths to search in.
+          items:
+            type: string
+        OutputMode:
+          type: string
+          enum: [content, files_with_matches, count]
+          description: Output format - 'content' shows matching lines with line numbers, 'files_with_matches' shows only filenames, 'count' shows total match count. Defaults to 'content'.
+        Limit:
+          type: integer
+          description: Maximum number of matches to return. Defaults to 250.
+        Offset:
+          type: integer
+          description: Number of matches to skip before returning results. Defaults to 0.
+        Glob:
+          type: string
+          description: Optional glob pattern to filter files by name (e.g., "*.go" or "*test.go").
+        Before:
+          type: integer
+          description: Number of lines to show before each match. Maximum 10. Defaults to 0.
+        After:
+          type: integer
+          description: Number of lines to show after each match. Maximum 10. Defaults to 0.
+        Context:
+          type: integer
+          description: Number of lines to show before and after each match. Overrides Before and After if set. Maximum 10. Defaults to 0.
+      required:
+        - Regex
+        - TargetPaths

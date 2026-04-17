@@ -1,0 +1,34 @@
+name: background
+description: Manage long-running background processes.
+requested_permissions: {}
+tools:
+  - name: start_background_process
+    description: Spins up a long-running process (like a web server). Returns a process ID.
+    parameters:
+      type: object
+      properties:
+        Command:
+          type: string
+          description: The shell command to run.
+      required:
+        - Command
+  - name: read_process_logs
+    description: Reads the combined stdout/stderr of a background process.
+    parameters:
+      type: object
+      properties:
+        ID:
+          type: string
+          description: The process ID returned by start_background_process.
+      required:
+        - ID
+  - name: kill_process
+    description: Terminates a background process.
+    parameters:
+      type: object
+      properties:
+        ID:
+          type: string
+          description: The process ID returned by start_background_process.
+      required:
+        - ID

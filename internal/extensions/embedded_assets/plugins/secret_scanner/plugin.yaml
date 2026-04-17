@@ -1,0 +1,6 @@
+name: secret_scanner
+description: System plugin that scans the workspace for sensitive files on startup.
+permissions: {}
+hooks:
+  - name: scan_workspace
+    event: on_startup

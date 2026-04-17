@@ -1,0 +1,39 @@
+FROM --platform=linux/amd64 ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Define versions here for easy maintenance
+ENV GO_VERSION=1.25.0
+ENV TINYGO_VERSION=0.40.1
+
+# Install basics, Node.js, and Python
+RUN apt-get update && apt-get install -y \
+    curl wget git jq build-essential sudo \
+    python3 python3-pip \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install standard Go
+RUN wget https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
+    rm go${GO_VERSION}.linux-amd64.tar.gz
+
+# Install TinyGo (using the efficient streaming extraction you provided)
+RUN wget -qO- https://github.com/tinygo-org/tinygo/releases/download/v${TINYGO_VERSION}/tinygo${TINYGO_VERSION}.linux-amd64.tar.gz | \
+    tar -zxf - -C /usr/local
+
+# Set paths for Go, TinyGo, and Go workspace
+ENV PATH=$PATH:/usr/local/go/bin:/usr/local/tinygo/bin
+ENV GOPATH=/home/falken/go
+ENV PATH=$PATH:$GOPATH/bin
+
+# Create a non-root user with passwordless sudo
+RUN useradd -m -s /bin/bash falken \
+    && echo "falken ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+USER falken
+WORKDIR /workspace
+
+# Verify both installations during the build
+RUN go version && tinygo version

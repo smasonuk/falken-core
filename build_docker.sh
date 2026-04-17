@@ -1,0 +1,1 @@
+docker build -t falken/sandbox:latest -f Dockerfile.sandbox .
