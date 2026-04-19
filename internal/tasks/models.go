@@ -32,6 +32,16 @@ type Task struct {
 	CompletedAt  int64      `json:"completed_at,omitempty"`
 }
 
+// IsValidTaskStatus reports whether status is a known task status constant.
+func IsValidTaskStatus(status TaskStatus) bool {
+	switch status {
+	case StatusPending, StatusInProgress, StatusVerifying, StatusCompleted, StatusFailed, StatusCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
 type TaskPatch struct {
 	Status      *TaskStatus
 	Subject     *string

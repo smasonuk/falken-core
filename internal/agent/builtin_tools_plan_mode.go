@@ -21,7 +21,7 @@ func (t *EnterPlanModeTool) Description() string {
 	return `Requests to enter plan mode for complex tasks requiring exploration and design.
 
 CRITICAL USAGE RULES:
-1. Read-Only State: Entering this mode instantly disables your ability to edit files or run shell commands. 
+1. Read-Only State: Entering this mode instantly disables your ability to edit files or run shell commands.
 2. Goal: Your objective is to use 'glob', 'grep', and 'read_file' to explore the codebase, then use 'write_plan' to write a Markdown architecture plan into Falken runtime state.
 3. When to Use: Mandatory for multi-file features, complex refactors, or anytime you are unfamiliar with the codebase structure. Do not use for simple 1-line bug fixes.`
 }
@@ -44,6 +44,11 @@ func (t *EnterPlanModeTool) Definition() openai.FunctionDefinition {
 }
 
 func (t *EnterPlanModeTool) Run(ctx context.Context, args any) (map[string]any, error) {
+	store, errResult := planStoreForRunner(t.runner)
+	if errResult != nil {
+		return errResult, nil
+	}
+
 	t.runner.mu.Lock()
 	if t.runner.Mode == ModePlan {
 		t.runner.mu.Unlock()
@@ -54,21 +59,22 @@ func (t *EnterPlanModeTool) Run(ctx context.Context, args any) (map[string]any, 
 	t.runner.PlanInitiator = PlanInitiatorAgent
 	t.runner.mu.Unlock()
 
-	// Initialize the plan
-	if err := t.runner.planStore.Write("# Implementation Plan\n\n"); err != nil {
+	if err := store.Write("# Implementation Plan\n\n"); err != nil {
+		t.runner.mu.Lock()
+		t.runner.Mode = ModeDefault
+		t.runner.PlanInitiator = ""
+		t.runner.mu.Unlock()
 		return map[string]any{"error": "Failed to initialize plan: " + err.Error()}, nil
 	}
 
 	return map[string]any{
-		"result": `Entered plan mode. You should now focus on exploring the codebase and designing an implementation approach.
-    
-    In plan mode, you should:
-    1. Thoroughly explore the codebase using read tools.
-    2. Consider multiple approaches and their trade-offs.
-    3. Write your concrete implementation strategy using the 'write_plan' tool.
-    4. When your plan is fully written, use the 'exit_plan_mode' tool.
-    
-    Remember: DO NOT write or edit any other files yet. This is a read-only exploration phase.`,
+		"result": "Entered plan mode. You should now focus on read-only exploration and architecture planning.\n\n" +
+			"In plan mode:\n" +
+			"1. Use read tools such as glob, grep, read_file, and read_files to understand the codebase.\n" +
+			"2. Do not edit workspace files or run shell commands.\n" +
+			"3. Write the plan using write_plan, not write_file.\n" +
+			"4. The plan must include these sections: Goal, Files, Changes, Verification, and Risks / Rollback.\n" +
+			"5. When the plan is complete, call exit_plan_mode.\n",
 	}, nil
 }
 
@@ -100,12 +106,17 @@ func (t *ExitPlanModeTool) Definition() openai.FunctionDefinition {
 }
 
 func (t *ExitPlanModeTool) Run(ctx context.Context, args any) (map[string]any, error) {
+	store, errResult := planStoreForRunner(t.runner)
+	if errResult != nil {
+		return errResult, nil
+	}
+
 	if t.runner.Mode != ModePlan {
 		return map[string]any{"error": "You are not in plan mode. Continue with your task."}, nil
 	}
 
-	planPath := t.runner.planStore.Path()
-	planContent, err := t.runner.planStore.Read()
+	planPath := store.Path()
+	planContent, err := store.Read()
 	if err != nil || strings.TrimSpace(planContent) == "" {
 		return map[string]any{"error": "Could not read plan or plan is empty. Please write your plan first using write_plan."}, nil
 	}
@@ -180,7 +191,9 @@ Use this in plan mode after exploring the codebase. The plan should be Markdown 
 - Verification
 - Risks / Rollback
 
-This tool writes to Falken internal runtime state, not to the workspace. Do not use write_file for implementation plans.`
+This tool writes to Falken internal runtime state, not to the workspace. Do not use write_file for implementation plans.
+
+This tool can only write the current implementation plan. It cannot write arbitrary files or artifacts.`
 }
 func (t *WritePlanTool) IsLongRunning() bool { return false }
 
@@ -202,6 +215,11 @@ func (t *WritePlanTool) Definition() openai.FunctionDefinition {
 }
 
 func (t *WritePlanTool) Run(ctx context.Context, args any) (map[string]any, error) {
+	store, errResult := planStoreForRunner(t.runner)
+	if errResult != nil {
+		return errResult, nil
+	}
+
 	m, ok := args.(map[string]any)
 	if !ok {
 		return map[string]any{"error": "Invalid arguments"}, nil
@@ -211,13 +229,13 @@ func (t *WritePlanTool) Run(ctx context.Context, args any) (map[string]any, erro
 		return map[string]any{"error": "Content cannot be empty"}, nil
 	}
 
-	if err := t.runner.planStore.Write(content); err != nil {
+	if err := store.Write(content); err != nil {
 		return map[string]any{"error": "Failed to write plan: " + err.Error()}, nil
 	}
 
 	return map[string]any{
 		"result": "Plan written successfully.",
-		"path":   t.runner.planStore.Path(),
+		"path":   store.Path(),
 	}, nil
 }
 
@@ -249,7 +267,12 @@ func (t *ReadPlanTool) Definition() openai.FunctionDefinition {
 }
 
 func (t *ReadPlanTool) Run(ctx context.Context, args any) (map[string]any, error) {
-	content, err := t.runner.planStore.Read()
+	store, errResult := planStoreForRunner(t.runner)
+	if errResult != nil {
+		return errResult, nil
+	}
+
+	content, err := store.Read()
 	if err != nil {
 		return map[string]any{"error": "Failed to read plan: " + err.Error()}, nil
 	}
@@ -264,14 +287,26 @@ func (t *ReadPlanTool) Run(ctx context.Context, args any) (map[string]any, error
 	if content == "" {
 		res := map[string]any{"result": "No plan has been written yet."}
 		if includePath {
-			res["path"] = t.runner.planStore.Path()
+			res["path"] = store.Path()
 		}
 		return res, nil
 	}
 
 	res := map[string]any{"result": content}
 	if includePath {
-		res["path"] = t.runner.planStore.Path()
+		res["path"] = store.Path()
 	}
 	return res, nil
+}
+
+// planStoreForRunner returns the plan store for the runner, or a structured error result
+// if the runner or its plan store is not initialized.
+func planStoreForRunner(r *Runner) (*PlanStore, map[string]any) {
+	if r == nil {
+		return nil, map[string]any{"error": "Runner is not initialized"}
+	}
+	if r.planStore == nil {
+		return nil, map[string]any{"error": "Plan store is not initialized"}
+	}
+	return r.planStore, nil
 }

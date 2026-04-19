@@ -126,3 +126,53 @@ func TestTaskStoreUpdateTask_RetryCountIncrementsFailedToInProgress(t *testing.T
 		t.Fatalf("expected RetryCount 1, got %d", task.RetryCount)
 	}
 }
+
+func TestIsValidTaskStatus(t *testing.T) {
+	valid := []TaskStatus{StatusPending, StatusInProgress, StatusVerifying, StatusCompleted, StatusFailed, StatusCancelled}
+	for _, s := range valid {
+		if !IsValidTaskStatus(s) {
+			t.Errorf("expected %q to be valid", s)
+		}
+	}
+	invalid := []TaskStatus{"banana", "", "deleted", "COMPLETED"}
+	for _, s := range invalid {
+		if IsValidTaskStatus(s) {
+			t.Errorf("expected %q to be invalid", s)
+		}
+	}
+}
+
+func TestUpdateTask_InvalidStatusString(t *testing.T) {
+	store := newTestTaskStore(t)
+	id := mustCreateTask(t, store, "task", nil)
+
+	for _, bad := range []TaskStatus{"banana", "", "deleted"} {
+		if err := store.UpdateTask(id, TaskPatch{Status: statusPtr(bad)}); err == nil {
+			t.Errorf("expected error for invalid status %q, got nil", bad)
+		}
+	}
+}
+
+func TestCreateTask_NonexistentDependency(t *testing.T) {
+	store := newTestTaskStore(t)
+	_, err := store.CreateTask("subagent", "task", "desc", []string{"999"}, "")
+	if err == nil {
+		t.Fatal("expected error for nonexistent dependency, got nil")
+	}
+}
+
+func TestCreateTask_SelfDependency(t *testing.T) {
+	// Self-dependency via ID assigned at creation is impossible via the normal path
+	// (the task doesn't know its own ID before creation), but the guard should still
+	// catch any future cases where the generated ID matches a supplied dep ID.
+	// Here we seed a task so ID "2" will be next, then try to create a task with dep "2".
+	store := newTestTaskStore(t)
+	_ = mustCreateTask(t, store, "seed", nil) // gets ID "1"
+
+	// Try to depend on "2" which will be this task's own ID
+	_, err := store.CreateTask("subagent", "self-dep", "desc", []string{"2"}, "")
+	// "2" doesn't exist yet, so it should fail with nonexistent-dep error
+	if err == nil {
+		t.Fatal("expected error when depending on own (not yet existing) ID")
+	}
+}

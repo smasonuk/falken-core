@@ -176,8 +176,11 @@ func (s *delegatedTaskService) handleSubAgentCompletion(launch *delegatedTaskLau
 	copiedPlanPath := ""
 	if planBytes, err := os.ReadFile(subPlanPath); err == nil && len(strings.TrimSpace(string(planBytes))) > 0 {
 		taskPlanPath := filepath.Join(taskDir, "plan.md")
-		_ = os.WriteFile(taskPlanPath, planBytes, 0644)
-		copiedPlanPath = taskPlanPath
+		if err := os.WriteFile(taskPlanPath, planBytes, 0644); err == nil {
+			copiedPlanPath = taskPlanPath
+		} else {
+			s.runner.logger.Printf("Warning: failed to copy sub-agent plan for task %s: %v", launch.taskID, err)
+		}
 	}
 
 	if runErr != nil {

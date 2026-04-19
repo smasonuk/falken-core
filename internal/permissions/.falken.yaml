@@ -1,0 +1,18 @@
+sandbox_image: falken/sandbox:latest
+show_permission_overview: false
+caches: {}
+global_blocked_urls: []
+global_allowed_urls: []
+global_blocked_files: []
+global_allowed_files: []
+global_blocked_commands: []
+global_allowed_commands: []
+persistent_allowed_urls:
+    - https://example.com
+persistent_allowed_commands:
+    - git
+persistent_allowed_files:
+    .env: read
+strict_file_allowlist: false
+strict_command_allowlist: false
+approved_plugins: {}

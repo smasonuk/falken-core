@@ -40,6 +40,10 @@ func (m *processManager) startProcess(s *StatefulShell, command string) (string,
 		return fmt.Sprintf("Started process %s with ID: %s", command, id), nil
 	}
 
+	if !s.TestingMode {
+		return "", fmt.Errorf("FATAL: Sandbox is not active. Local host background execution is strictly disabled for security. Please restart the sandbox.")
+	}
+
 	cmd := exec.Command("sh", "-c", command)
 	cmd.Dir = s.RealCWD
 	cmd.Env = s.EnvVars

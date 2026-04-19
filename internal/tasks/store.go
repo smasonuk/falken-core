@@ -127,15 +127,23 @@ func (s *TaskStore) CreateTask(kind, subject, description string, dependsOn []st
 			newTask.DependsOn = []string{}
 		}
 
-		// Ensure dependencies exist
+		// Ensure dependencies exist and do not form cycles
 		if len(newTask.DependsOn) > 0 {
 			taskMap := make(map[string]bool)
-			for _, t := range tasks {
-				taskMap[t.ID] = true
+			pointerTaskMap := make(map[string]*Task)
+			for i := range tasks {
+				taskMap[tasks[i].ID] = true
+				pointerTaskMap[tasks[i].ID] = &tasks[i]
 			}
 			for _, depID := range newTask.DependsOn {
+				if depID == newID {
+					return nil, fmt.Errorf("task cannot depend on itself")
+				}
 				if !taskMap[depID] {
 					return nil, fmt.Errorf("dependency task ID %s does not exist", depID)
+				}
+				if wouldCreateCycle(pointerTaskMap, depID, newID) {
+					return nil, fmt.Errorf("cannot add dependency: creates a circular loop")
 				}
 			}
 		}
@@ -195,6 +203,9 @@ func (s *TaskStore) UpdateTask(id string, patch TaskPatch) error {
 
 		if patch.Status != nil {
 			newStatus := *patch.Status
+			if !IsValidTaskStatus(newStatus) {
+				return nil, fmt.Errorf("invalid task status %q", newStatus)
+			}
 			if err := validateTransition(task.Status, newStatus); err != nil {
 				return nil, err
 			}

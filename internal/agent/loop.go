@@ -323,8 +323,11 @@ func (r *Runner) ForcePlanMode(userInitiated bool) {
 		r.PlanInitiator = PlanInitiatorAgent
 	}
 
-	// Initialize the plan
-	_ = r.planStore.Write("# Implementation Plan\n\n")
+	if err := r.planStore.Write("# Implementation Plan\n\n"); err != nil {
+		r.Mode = ModeDefault
+		r.PlanInitiator = ""
+		r.logger.Printf("failed to initialize plan mode: %v", err)
+	}
 }
 
 // ResetConversationState reinitializes the runner's stores with new paths.
