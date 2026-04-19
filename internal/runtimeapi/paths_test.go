@@ -6,6 +6,70 @@ import (
 	"testing"
 )
 
+func TestPaths_Layout(t *testing.T) {
+	workspace := t.TempDir()
+	paths, err := NewPaths(workspace, "")
+	if err != nil {
+		t.Fatalf("NewPaths failed: %v", err)
+	}
+
+	expectedStateDir := filepath.Join(workspace, ".falken")
+	expectedCurrentDir := filepath.Join(expectedStateDir, "state", "current")
+
+	if paths.CurrentStateDir() != expectedCurrentDir {
+		t.Errorf("expected CurrentStateDir %q, got %q", expectedCurrentDir, paths.CurrentStateDir())
+	}
+	if paths.HistoryPath() != filepath.Join(expectedCurrentDir, "history.jsonl") {
+		t.Errorf("unexpected HistoryPath")
+	}
+	if paths.MemoryPath() != filepath.Join(expectedCurrentDir, "memory.json") {
+		t.Errorf("unexpected MemoryPath")
+	}
+	if paths.PluginStateDir() != filepath.Join(expectedCurrentDir, "plugin_states") {
+		t.Errorf("unexpected PluginStateDir")
+	}
+	if paths.RunsDir() != filepath.Join(expectedCurrentDir, "runs") {
+		t.Errorf("unexpected RunsDir")
+	}
+	if paths.TruncationDir() != filepath.Join(expectedCurrentDir, "truncations") {
+		t.Errorf("unexpected TruncationDir")
+	}
+	if paths.CacheDir() != filepath.Join(expectedStateDir, "cache") {
+		t.Errorf("unexpected CacheDir")
+	}
+	if paths.BackupDir() != filepath.Join(expectedStateDir, "backups") {
+		t.Errorf("unexpected BackupDir")
+	}
+}
+
+func TestSubRunPaths_Robustness(t *testing.T) {
+	parent, _ := NewPaths(t.TempDir(), "")
+	sub := parent.SubRunPaths("abc")
+	expectedSubState := filepath.Join(parent.CurrentStateDir(), "runs", "abc")
+
+	if sub.StateDir != expectedSubState {
+		t.Errorf("expected sub StateDir %q, got %q", expectedSubState, sub.StateDir)
+	}
+
+	if sub.CurrentStateDir() != expectedSubState {
+		t.Errorf("expected sub CurrentStateDir %q, got %q", expectedSubState, sub.CurrentStateDir())
+	}
+
+	if sub.HistoryPath() != filepath.Join(expectedSubState, "history.jsonl") {
+		t.Errorf("expected sub history path under runs/abc")
+	}
+
+	// Nested sub-run (e.g. verifier)
+	verify := sub.SubRunPaths("verify_123")
+	expectedVerifyState := filepath.Join(expectedSubState, "runs", "verify_123")
+	if verify.StateDir != expectedVerifyState {
+		t.Errorf("expected verify StateDir %q, got %q", expectedVerifyState, verify.StateDir)
+	}
+	if verify.CurrentStateDir() != expectedVerifyState {
+		t.Errorf("expected verify CurrentStateDir %q, got %q", expectedVerifyState, verify.CurrentStateDir())
+	}
+}
+
 func TestSubRunPaths_IsolatesStateDir(t *testing.T) {
 	parent, err := NewPaths(t.TempDir(), "")
 	if err != nil {
@@ -61,7 +125,7 @@ func TestSubRunPaths_SanitizesRunID(t *testing.T) {
 	}
 
 	child := parent.SubRunPaths(filepath.Join("nested", "run"))
-	expected := filepath.Join(parent.StateDir, "runs", "nested_run")
+	expected := filepath.Join(parent.CurrentStateDir(), "runs", "nested_run")
 	if child.StateDir != expected {
 		t.Fatalf("expected sanitized state dir %q, got %q", expected, child.StateDir)
 	}
@@ -103,10 +167,10 @@ func TestEnsureStateDirs_MigratesLegacyPaths(t *testing.T) {
 
 	// Verify files moved
 	expectedMigrations := map[string]string{
-		filepath.Join(stateDir, "history.jsonl"): p.HistoryPath(),
-		filepath.Join(stateDir, "memory.json"):  p.MemoryPath(),
-		filepath.Join(stateDir, "tasks.json"):   p.TasksPath(),
-		filepath.Join(stateDir, "todos.json"):   p.TodosPath(),
+		filepath.Join(stateDir, "history.jsonl"):       p.HistoryPath(),
+		filepath.Join(stateDir, "memory.json"):         p.MemoryPath(),
+		filepath.Join(stateDir, "tasks.json"):          p.TasksPath(),
+		filepath.Join(stateDir, "todos.json"):          p.TodosPath(),
 		filepath.Join(stateDir, "tasks", "task1.json"): filepath.Join(p.TasksDir(), "task1.json"),
 	}
 

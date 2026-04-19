@@ -13,6 +13,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/google/uuid"
+	"github.com/smasonuk/falken-core/internal/runtimeapi"
 )
 
 type sandboxManager struct{}
@@ -51,14 +52,18 @@ func (m *sandboxManager) start(s *StatefulShell, ctx context.Context, imageName 
 		"NO_PROXY=localhost,127.0.0.1",
 	}
 
-	hostCertPath, _ := filepath.Abs(filepath.Join(s.StateDir, "cache", "proxy-ca.crt"))
+	paths := runtimeapi.Paths{
+		WorkspaceDir: s.WorkspaceDir,
+		StateDir:     s.StateDir,
+	}
+	hostCertPath, _ := filepath.Abs(paths.ProxyCertPath())
 	binds := []string{
 		fmt.Sprintf("%s:%s", s.SandboxCWD, s.RealCWD),
 		fmt.Sprintf("%s:/usr/local/share/ca-certificates/falken-proxy.crt:ro", hostCertPath),
 	}
 
 	if s.PermManager != nil && s.PermManager.Config != nil {
-		cachesDir := filepath.Join(s.StateDir, "caches")
+		cachesDir := paths.MountedCachesDir()
 		os.MkdirAll(cachesDir, 0755)
 
 		for cacheName, cacheCfg := range s.PermManager.Config.Caches {

@@ -18,6 +18,7 @@ import (
 
 	"github.com/smasonuk/falken-core/internal/bash"
 	"github.com/smasonuk/falken-core/internal/permissions"
+	"github.com/smasonuk/falken-core/internal/runtimeapi"
 	"github.com/smasonuk/falken-core/internal/runtimectx"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -768,7 +769,11 @@ func (s *StatefulShell) hostGetState(ctx context.Context, m api.Module) uint32 {
 		return s.writeStringToMemory(ctx, m, "")
 	}
 
-	statePath := filepath.Join(s.StateDir, "plugin_states", pluginName+".json")
+	paths := runtimeapi.Paths{
+		WorkspaceDir: s.WorkspaceDir,
+		StateDir:     s.StateDir,
+	}
+	statePath := filepath.Join(paths.PluginStateDir(), pluginName+".json")
 	data, err := os.ReadFile(statePath)
 	if err != nil {
 		return s.writeStringToMemory(ctx, m, "") // Return empty string if no state exists yet
@@ -788,7 +793,11 @@ func (s *StatefulShell) hostSetState(ctx context.Context, m api.Module, ptr, len
 		return s.writeError(ctx, m, fmt.Errorf("failed to read state data from memory"))
 	}
 
-	stateDir := filepath.Join(s.StateDir, "plugin_states")
+	paths := runtimeapi.Paths{
+		WorkspaceDir: s.WorkspaceDir,
+		StateDir:     s.StateDir,
+	}
+	stateDir := paths.PluginStateDir()
 	if err := os.MkdirAll(stateDir, 0755); err != nil {
 		return s.writeError(ctx, m, fmt.Errorf("failed to create state directory: %v", err))
 	}

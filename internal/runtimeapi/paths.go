@@ -48,11 +48,9 @@ func (p Paths) EnsureStateDirs() error {
 	// Create base directories first
 	dirs := []string{
 		p.StateDir,
-		p.CurrentStateDir(),
 		p.CacheDir(),
-		p.TruncationDir(),
 		p.BackupDir(),
-		p.PluginStateDir(),
+		p.CurrentStateDir(),
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0755); err != nil {
@@ -60,52 +58,73 @@ func (p Paths) EnsureStateDirs() error {
 		}
 	}
 
-	// Migrate legacy paths to .falken/state/current/
-	legacyMap := map[string]string{
-		filepath.Join(p.StateDir, "history.jsonl"): p.HistoryPath(),
-		filepath.Join(p.StateDir, "memory.json"):  p.MemoryPath(),
-		filepath.Join(p.StateDir, "tasks.json"):   p.TasksPath(),
-		filepath.Join(p.StateDir, "tasks"):        p.TasksDir(),
-		filepath.Join(p.StateDir, "todos.json"):   p.TodosPath(),
+	// if migrate {
+	// 	// Migrate legacy paths to .falken/state/current/
+	// 	legacyMap := map[string]string{
+	// 		filepath.Join(p.StateDir, "history.jsonl"): p.HistoryPath(),
+	// 		filepath.Join(p.StateDir, "memory.json"):  p.MemoryPath(),
+	// 		filepath.Join(p.StateDir, "tasks.json"):   p.TasksPath(),
+	// 		filepath.Join(p.StateDir, "tasks"):        p.TasksDir(),
+	// 		filepath.Join(p.StateDir, "todos.json"):   p.TodosPath(),
+	// 	}
+
+	// 	for legacy, current := range legacyMap {
+	// 		if _, err := os.Stat(legacy); err != nil {
+	// 			if os.IsNotExist(err) {
+	// 				continue
+	// 			}
+	// 			return err
+	// 		}
+
+	// 		// If destination already exists, skip migration for this file/dir.
+	// 		if _, err := os.Stat(current); err == nil {
+	// 			continue
+	// 		} else if !os.IsNotExist(err) {
+	// 			return err
+	// 		}
+
+	// 		// Perform migration.
+	// 		if err := os.Rename(legacy, current); err != nil {
+	// 			return err
+	// 		}
+	// 	}
+	// }
+
+	// Ensure subdirectories are created if they didn't exist or migrate
+	subDirs := []string{
+		p.TasksDir(),
+		p.PluginStateDir(),
+		p.RunsDir(),
+		p.TruncationDir(),
 	}
-
-	for legacy, current := range legacyMap {
-		if _, err := os.Stat(legacy); err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
+	for _, dir := range subDirs {
+		if err := os.MkdirAll(dir, 0755); err != nil {
 			return err
 		}
-
-		// If destination already exists, skip migration for this file/dir.
-		if _, err := os.Stat(current); err == nil {
-			continue
-		} else if !os.IsNotExist(err) {
-			return err
-		}
-
-		// Perform migration.
-		if err := os.Rename(legacy, current); err != nil {
-			return err
-		}
-	}
-
-	// Ensure any remaining directories (like tasks) are created if they didn't exist or migrate
-	if err := os.MkdirAll(p.TasksDir(), 0755); err != nil {
-		return err
 	}
 
 	return nil
 }
 
+// ResetCurrentState removes the current session's persisted state directory.
+func (p Paths) ResetCurrentState() error {
+	return os.RemoveAll(p.CurrentStateDir())
+}
 
 // CurrentStateDir returns the directory used for the current session's persisted state.
 func (p Paths) CurrentStateDir() string {
-	target := filepath.Join("state", "current")
-	if strings.HasSuffix(filepath.ToSlash(p.StateDir), target) {
-		return p.StateDir
+	clean := filepath.Clean(p.StateDir)
+	slash := filepath.ToSlash(clean)
+
+	if filepath.Base(clean) == "current" && filepath.Base(filepath.Dir(clean)) == "state" {
+		return clean
 	}
-	return filepath.Join(p.StateDir, target)
+
+	if strings.Contains(slash, "/state/current/runs/") {
+		return clean
+	}
+
+	return filepath.Join(clean, "state", "current")
 }
 
 // HistoryPath returns the persisted conversation history path.
@@ -140,7 +159,7 @@ func (p Paths) CacheDir() string {
 
 // TruncationDir returns the directory used for truncated content snapshots.
 func (p Paths) TruncationDir() string {
-	return filepath.Join(p.StateDir, "truncations")
+	return filepath.Join(p.CurrentStateDir(), "truncations")
 }
 
 // BackupDir returns the directory used for file backup snapshots.
@@ -150,7 +169,17 @@ func (p Paths) BackupDir() string {
 
 // PluginStateDir returns the directory used for per-plugin persisted state.
 func (p Paths) PluginStateDir() string {
-	return filepath.Join(p.StateDir, "plugin_states")
+	return filepath.Join(p.CurrentStateDir(), "plugin_states")
+}
+
+// RunsDir returns the directory used for child runs.
+func (p Paths) RunsDir() string {
+	return filepath.Join(p.CurrentStateDir(), "runs")
+}
+
+// MountedCachesDir returns the directory used for configured cache mounts.
+func (p Paths) MountedCachesDir() string {
+	return filepath.Join(p.StateDir, "caches")
 }
 
 // ProxyCertPath returns the path where the sandbox proxy CA certificate is written.
@@ -170,8 +199,10 @@ func (p Paths) SubRunPaths(runID string) Paths {
 		runID = "subrun"
 	}
 	runID = strings.ReplaceAll(runID, string(filepath.Separator), "_")
+	runID = strings.ReplaceAll(runID, "/", "_")
+
 	return Paths{
 		WorkspaceDir: p.WorkspaceDir,
-		StateDir:     filepath.Join(p.StateDir, "runs", runID),
+		StateDir:     filepath.Join(p.RunsDir(), runID),
 	}
 }

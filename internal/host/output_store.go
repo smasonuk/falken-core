@@ -20,7 +20,11 @@ func (o *outputStore) formatOutput(s *StatefulShell, output string) string {
 		return output
 	}
 
-	truncationDir := runtimeapi.Paths{StateDir: s.StateDir}.TruncationDir()
+	paths := runtimeapi.Paths{
+		WorkspaceDir: s.WorkspaceDir,
+		StateDir:     s.StateDir,
+	}
+	truncationDir := paths.TruncationDir()
 	os.MkdirAll(truncationDir, 0755)
 
 	fileName := fmt.Sprintf("output_%d.txt", time.Now().Unix())
@@ -29,7 +33,11 @@ func (o *outputStore) formatOutput(s *StatefulShell, output string) string {
 
 	preview := output[:maxChars]
 	linesHidden := strings.Count(output[maxChars:], "\n")
-	relPath := filepath.Join(s.StateDir, "truncations", fileName)
 
-	return fmt.Sprintf("%s\n\n[TRUNCATED: %d lines hidden. The full output was too large for your context window and has been saved to '%s'. Use the 'grep' or 'read_file' tool on this readable file to extract the specific information you need.]", preview, linesHidden, relPath)
+	displayPath := filePath
+	if rel, err := filepath.Rel(paths.WorkspaceDir, filePath); err == nil && !strings.HasPrefix(rel, "..") {
+		displayPath = rel
+	}
+
+	return fmt.Sprintf("%s\n\n[TRUNCATED: %d lines hidden. Full output was saved to internal session state at '%s'. Ask the host/user to inspect this file, or rerun a narrower command.]", preview, linesHidden, displayPath)
 }

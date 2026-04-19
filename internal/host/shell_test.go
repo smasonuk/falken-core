@@ -262,7 +262,8 @@ func TestStatefulShell_FormatOutputPersistsTruncation(t *testing.T) {
 		t.Fatalf("expected truncated marker, got %q", output)
 	}
 
-	truncDir := filepath.Join(shell.StateDir, "truncations")
+	paths := runtimeapi.Paths{StateDir: shell.StateDir}
+	truncDir := paths.TruncationDir()
 	entries, err := os.ReadDir(truncDir)
 	if err != nil {
 		t.Fatalf("ReadDir failed: %v", err)

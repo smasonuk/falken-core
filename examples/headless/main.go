@@ -42,6 +42,11 @@ func main() {
 		Client:             openai.NewClientWithConfig(clientCfg),
 		ModelName:          "gpt-5.2",
 		SystemPrompt:       "You are a headless Falken session.",
+
+		// Default is StateModeFresh. Use StateModeResume to continue from
+		// .falken/state/current on a future run.
+		// StateMode: falken.StateModeResume,
+
 		InteractionHandler: headlessInteractions{},
 		EventHandler: falken.EventHandlerFunc(func(event falken.Event) {
 			fmt.Printf("event=%s\n", event.Type)

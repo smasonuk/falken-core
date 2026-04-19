@@ -122,6 +122,7 @@ func NewRunner(opts RunnerOptions) (*Runner, error) {
 	}
 
 	_ = os.MkdirAll(paths.StateDir, 0755)
+	_ = paths.EnsureStateDirs()
 	if r.ToolDir == "" && paths.WorkspaceDir != "" {
 		r.ToolDir = filepath.Join(paths.WorkspaceDir, "tools")
 	}
@@ -304,6 +305,21 @@ func (r *Runner) ActivateTool(name string) error {
 
 func (r *Runner) ClearHistory() {
 	r.History = nil
+}
+
+// ResetConversationState reinitializes the runner's stores with new paths.
+func (r *Runner) ResetConversationState(paths runtimeapi.Paths) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.History = nil
+	r.LogPath = paths.HistoryPath()
+	r.taskStore = tasks.NewTaskStore(paths.TasksPath())
+	r.todoStore = todo.NewTodoStore(paths.TodosPath())
+	r.memoryStore = NewMemoryStore(paths.MemoryPath())
+	r.Paths = paths
+
+	return nil
 }
 
 func (r *Runner) appendToLog(msg openai.ChatCompletionMessage) error {

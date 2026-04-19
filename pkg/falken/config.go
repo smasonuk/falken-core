@@ -8,6 +8,17 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 )
 
+// StateMode controls whether .falken/state/current is reset or reused when
+// constructing a session. The default is StateModeFresh.
+type StateMode string
+
+const (
+	// StateModeFresh deletes .falken/state/current before the session loads.
+	StateModeFresh StateMode = "fresh"
+	// StateModeResume preserves .falken/state/current for the new session.
+	StateModeResume StateMode = "resume"
+)
+
 // Config configures a reusable Falken runtime session.
 type Config struct {
 	Client             *openai.Client
@@ -15,6 +26,7 @@ type Config struct {
 	SystemPrompt       string
 	WorkspaceDir       string
 	StateDir           string
+	StateMode          StateMode
 	Logger             *log.Logger
 	PermissionsConfig  *PermissionsConfig
 	InteractionHandler InteractionHandler

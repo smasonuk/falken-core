@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"path/filepath"
 	"sort"
 
@@ -43,7 +42,23 @@ func NewSession(cfg Config) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := paths.EnsureStateDirs(); err != nil {
+
+	if cfg.StateMode == "" {
+		cfg.StateMode = StateModeFresh
+	}
+
+	switch cfg.StateMode {
+	case StateModeFresh:
+		if err := paths.ResetCurrentState(); err != nil {
+			return nil, err
+		}
+	case StateModeResume:
+		// Preserve current state.
+	default:
+		return nil, fmt.Errorf("invalid state mode %q", cfg.StateMode)
+	}
+
+	if err := paths.EnsureStateDirs(); err != nil { //cfg.StateMode == StateModeResume
 		return nil, err
 	}
 
@@ -152,7 +167,7 @@ func (s *Session) Start(ctx context.Context) error {
 	}
 	s.shell.ProxyPort = proxy.Port
 
-	if err := host.ResetRuntimeState(s.paths); err != nil {
+	if err := host.PrepareRuntimeState(s.paths); err != nil {
 		return err
 	}
 
@@ -243,21 +258,21 @@ func (s *Session) ClearHistory() {
 func (s *Session) ResetConversationState() error {
 	s.ClearHistory()
 
-	var errs []error
-	for _, path := range []string{
-		s.paths.HistoryPath(),
-		s.paths.MemoryPath(),
-		s.paths.TodosPath(),
-		s.paths.TasksPath(),
-	} {
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			errs = append(errs, err)
+	if err := s.paths.ResetCurrentState(); err != nil {
+		return err
+	}
+
+	if err := s.paths.EnsureStateDirs(); err != nil {
+		return err
+	}
+
+	if s.runner != nil {
+		if err := s.runner.ResetConversationState(s.paths); err != nil {
+			return err
 		}
 	}
-	if err := os.RemoveAll(s.paths.TasksDir()); err != nil {
-		errs = append(errs, err)
-	}
-	return errors.Join(errs...)
+
+	return nil
 }
 
 // ForcePlanMode puts the underlying runner into plan mode.
