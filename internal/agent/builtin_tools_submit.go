@@ -52,5 +52,10 @@ func (t *SubmitTaskTool) Run(ctx context.Context, args any) (map[string]any, err
 			return map[string]any{"error": err.Error()}, nil
 		}
 	}
+
+	t.runner.mu.Lock()
+	t.runner.RunShouldStop = true
+	t.runner.mu.Unlock()
+
 	return map[string]any{"result": "Task submitted for human review."}, nil
 }

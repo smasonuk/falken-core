@@ -13,7 +13,6 @@ type AgentMemory struct {
 	ImportantFiles []string `json:"important_files,omitempty"`
 	Decisions      []string `json:"decisions,omitempty"`
 	OpenQuestions  []string `json:"open_questions,omitempty"`
-	PlanPath       string   `json:"plan_path,omitempty"`
 	RecentSummary  string   `json:"recent_summary,omitempty"`
 	LastUpdated    int64    `json:"last_updated,omitempty"`
 }

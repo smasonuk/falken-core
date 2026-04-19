@@ -2,6 +2,7 @@ package host
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,8 +39,14 @@ func GenerateDiff(realCWD, sandboxCWD string, blockedFiles []string) (string, er
 	diffStr = strings.ReplaceAll(diffStr, sandboxRel, "")
 	diffStr = strings.ReplaceAll(diffStr, realRel, "")
 
+	rawFiles := ParseDiffFiles(diffStr)
+	log.Printf("[GenerateDiff] Raw files in diff: %v", rawFiles)
+
 	// Filter out ignored directories and stubbed secret files
 	diffStr = FilterDiff(diffStr, blockedFiles)
+
+	filteredFiles := ParseDiffFiles(diffStr)
+	log.Printf("[GenerateDiff] Filtered files in diff: %v", filteredFiles)
 
 	return diffStr, nil
 }
@@ -50,11 +57,16 @@ func FilterDiff(diffStr string, blockedFiles []string) string {
 
 	var currentChunk []string
 	skipChunk := false
+	currentFile := ""
 
 	for _, line := range lines {
 		if strings.HasPrefix(line, "diff --git") {
-			if len(currentChunk) > 0 && !skipChunk {
-				filtered.WriteString(strings.Join(currentChunk, "\n") + "\n")
+			if len(currentChunk) > 0 {
+				if !skipChunk {
+					filtered.WriteString(strings.Join(currentChunk, "\n") + "\n")
+				} else {
+					log.Printf("[FilterDiff] Skipping file: %s", currentFile)
+				}
 			}
 
 			currentChunk = []string{line}
@@ -64,6 +76,7 @@ func FilterDiff(diffStr string, blockedFiles []string) string {
 			if len(parts) >= 4 {
 				fileA := strings.TrimPrefix(parts[2], "a/")
 				fileB := strings.TrimPrefix(parts[3], "b/")
+				currentFile = fileB
 
 				if shouldIgnore(fileA, blockedFiles) || shouldIgnore(fileB, blockedFiles) {
 					skipChunk = true
@@ -74,8 +87,12 @@ func FilterDiff(diffStr string, blockedFiles []string) string {
 		}
 	}
 
-	if len(currentChunk) > 0 && !skipChunk {
-		filtered.WriteString(strings.Join(currentChunk, "\n") + "\n")
+	if len(currentChunk) > 0 {
+		if !skipChunk {
+			filtered.WriteString(strings.Join(currentChunk, "\n") + "\n")
+		} else {
+			log.Printf("[FilterDiff] Skipping file: %s", currentFile)
+		}
 	}
 
 	return filtered.String()

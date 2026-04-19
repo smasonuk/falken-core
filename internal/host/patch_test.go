@@ -189,3 +189,40 @@ rename to new.txt
 		t.Fatalf("expected [new.txt], got %#v", files)
 	}
 }
+
+func TestGenerateAndApplyDiff_NewFiles(t *testing.T) {
+	realDir := t.TempDir()
+	sandboxDir := t.TempDir()
+
+	writeTestFile(t, filepath.Join(realDir, "go.mod"), "module test\n")
+	writeTestFile(t, filepath.Join(sandboxDir, "go.mod"), "module test\n")
+	writeTestFile(t, filepath.Join(sandboxDir, "main.go"), "package main\n")
+
+	diff, err := GenerateDiff(realDir, sandboxDir, nil)
+	if err != nil {
+		t.Fatalf("GenerateDiff failed: %v", err)
+	}
+
+	files := ParseDiffFiles(diff)
+	foundMain := false
+	for _, f := range files {
+		if f == "main.go" {
+			foundMain = true
+		}
+	}
+	if !foundMain {
+		t.Fatalf("expected main.go in diff files, got %v\nDiff output:\n%s", files, diff)
+	}
+
+	result, err := ApplyChanges(realDir, sandboxDir, diff, nil)
+	if err != nil {
+		t.Fatalf("ApplyChanges failed: %v", err)
+	}
+	if result.GuardrailTriggered {
+		t.Fatalf("did not expect guardrail")
+	}
+
+	if _, err := os.Stat(filepath.Join(realDir, "main.go")); err != nil {
+		t.Fatalf("expected main.go to be applied to realDir, stat err=%v", err)
+	}
+}

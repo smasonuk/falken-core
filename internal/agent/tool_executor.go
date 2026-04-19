@@ -50,10 +50,11 @@ func (e *toolExecutor) executeToolCall(r *Runner, ctx context.Context, tc openai
 		id := tc.ID
 		cacheDir := r.Paths.CacheDir()
 		os.MkdirAll(cacheDir, 0755)
-		cachePath := filepath.Join(cacheDir, fmt.Sprintf("tool_output_%s.txt", id))
+		artifactID := fmt.Sprintf("tool_output_%s", id)
+		cachePath := filepath.Join(cacheDir, artifactID+".txt")
 		os.WriteFile(cachePath, resBytes, 0644)
 		limit := 5000
-		summary := fmt.Sprintf("[TRUNCATED: Output exceeded 15k chars. Full output saved to %s] \n\n%s...", cachePath, string(resBytes[:limit]))
+		summary := fmt.Sprintf("[TRUNCATED: Output exceeded 15k chars. Full output was saved to internal runtime cache as artifact %q. Ask the host to inspect it, or rerun the tool with a narrower query.]\n\n%s...", artifactID, string(resBytes[:limit]))
 		toolResult = map[string]any{"result": summary}
 		resBytes, _ = json.Marshal(toolResult)
 	}

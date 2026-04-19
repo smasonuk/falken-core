@@ -3,12 +3,71 @@ package agent
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/smasonuk/falken-core/internal/tasks"
 
 	"github.com/sashabaranov/go-openai"
 	"github.com/sashabaranov/go-openai/jsonschema"
 )
+
+func truncateTaskArtifact(content string) string {
+	const maxChars = 12000
+	if len(content) <= maxChars {
+		return content
+	}
+	return content[:maxChars] + "\n\n[TRUNCATED: task artifact exceeded 12000 characters.]"
+}
+
+func readTaskArtifact(path string) (string, bool, string) {
+	if path == "" {
+		return "", false, ""
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", true, fmt.Sprintf("Failed to read task artifact: %v", err)
+	}
+
+	return truncateTaskArtifact(string(data)), true, ""
+}
+
+func taskToModelView(task tasks.Task) map[string]any {
+	return map[string]any{
+		"id":             task.ID,
+		"kind":           task.Kind,
+		"subject":        task.Subject,
+		"description":    task.Description,
+		"status":         task.Status,
+		"depends_on":     task.DependsOn,
+		"parent_task_id": task.ParentTaskID,
+		"session_id":     task.SessionID,
+		"summary":        task.Summary,
+		"last_error":     task.LastError,
+		"retry_count":    task.RetryCount,
+		"owner":          task.Owner,
+		"created_at":     task.CreatedAt,
+		"updated_at":     task.UpdatedAt,
+		"started_at":     task.StartedAt,
+		"completed_at":   task.CompletedAt,
+		"has_result":     task.ResultPath != "",
+		"has_plan":       task.PlanPath != "",
+	}
+}
+
+func taskToListView(task tasks.Task) map[string]any {
+	return map[string]any{
+		"id":         task.ID,
+		"kind":       task.Kind,
+		"subject":    task.Subject,
+		"status":     task.Status,
+		"depends_on": task.DependsOn,
+		"has_result": task.ResultPath != "",
+		"has_plan":   task.PlanPath != "",
+		"summary":    task.Summary,
+		"last_error": task.LastError,
+	}
+}
 
 // TaskCreateTool
 type TaskCreateTool struct {
@@ -142,19 +201,9 @@ func (t *TaskListTool) Run(ctx context.Context, args any) (map[string]any, error
 			continue
 		}
 
-		taskData := map[string]any{
-			"id":         task.ID,
-			"kind":       task.Kind,
-			"subject":    task.Subject,
-			"status":     task.Status,
-			"depends_on": task.DependsOn,
-			"result_path": task.ResultPath,
-			"plan_path":   task.PlanPath,
-			"last_error": task.LastError,
-		}
+		taskData := taskToListView(task)
 
-		if task.Status == tasks.StatusInProgress || task.Status == tasks.StatusVerifying {
-			inProgressTasks = append(inProgressTasks, taskData)
+		if task.Status == tasks.StatusInProgress || task.Status == tasks.StatusVerifying {			inProgressTasks = append(inProgressTasks, taskData)
 		} else if task.Status == tasks.StatusCompleted {
 			completedTasks = append(completedTasks, taskData)
 		} else if task.Status == tasks.StatusPending || task.Status == tasks.StatusFailed {
@@ -223,7 +272,27 @@ func (t *TaskGetTool) Run(ctx context.Context, args any) (map[string]any, error)
 		return nil, err
 	}
 
-	return map[string]any{"task": task}, nil
+	res := map[string]any{
+		"task": taskToModelView(*task),
+	}
+
+	if content, exists, readErr := readTaskArtifact(task.ResultPath); exists {
+		if readErr != "" {
+			res["result_error"] = readErr
+		} else {
+			res["result"] = content
+		}
+	}
+
+	if content, exists, readErr := readTaskArtifact(task.PlanPath); exists {
+		if readErr != "" {
+			res["plan_error"] = readErr
+		} else {
+			res["plan"] = content
+		}
+	}
+
+	return res, nil
 }
 
 // TaskUpdateTool
@@ -268,14 +337,6 @@ func (t *TaskUpdateTool) Definition() openai.FunctionDefinition {
 					Type:        jsonschema.String,
 					Description: "Error message if the task failed.",
 				},
-				"ResultPath": {
-					Type:        jsonschema.String,
-					Description: "Path to the file containing the task result.",
-				},
-				"PlanPath": {
-					Type:        jsonschema.String,
-					Description: "Path to the file containing the task plan.",
-				},
 				"DependsOn": {
 					Type: jsonschema.Array,
 					Items: &jsonschema.Definition{
@@ -318,12 +379,6 @@ func (t *TaskUpdateTool) Run(ctx context.Context, args any) (map[string]any, err
 	}
 	if lastError, ok := m["LastError"].(string); ok {
 		patch.LastError = &lastError
-	}
-	if resultPath, ok := m["ResultPath"].(string); ok {
-		patch.ResultPath = &resultPath
-	}
-	if planPath, ok := m["PlanPath"].(string); ok {
-		patch.PlanPath = &planPath
 	}
 	if dependsOn, ok := m["DependsOn"].([]any); ok {
 		var deps []string

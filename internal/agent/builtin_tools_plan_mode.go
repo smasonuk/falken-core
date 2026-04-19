@@ -115,7 +115,6 @@ func (t *ExitPlanModeTool) Run(ctx context.Context, args any) (map[string]any, e
 		return map[string]any{"error": "You are not in plan mode. Continue with your task."}, nil
 	}
 
-	planPath := store.Path()
 	planContent, err := store.Read()
 	if err != nil || strings.TrimSpace(planContent) == "" {
 		return map[string]any{"error": "Could not read plan or plan is empty. Please write your plan first using write_plan."}, nil
@@ -136,8 +135,7 @@ func (t *ExitPlanModeTool) Run(ctx context.Context, args any) (map[string]any, e
 
 	updateMemoryOnPlanExit := func() {
 		if mem, err := t.runner.memoryStore.Read(); err == nil {
-			mem.PlanPath = planPath
-			mem.Decisions = mergeUniqueStrings(mem.Decisions, []string{"Formulated implementation plan"})
+			mem.Decisions = mergeUniqueStrings(mem.Decisions, []string{"Formulated implementation plan in runtime state"})
 			t.runner.memoryStore.Write(mem)
 		}
 	}
@@ -191,7 +189,7 @@ Use this in plan mode after exploring the codebase. The plan should be Markdown 
 - Verification
 - Risks / Rollback
 
-This tool writes to Falken internal runtime state, not to the workspace. Do not use write_file for implementation plans.
+This tool writes to Falken internal runtime state, not to the workspace. Use read_plan to view the current plan.
 
 This tool can only write the current implementation plan. It cannot write arbitrary files or artifacts.`
 }
@@ -234,8 +232,7 @@ func (t *WritePlanTool) Run(ctx context.Context, args any) (map[string]any, erro
 	}
 
 	return map[string]any{
-		"result": "Plan written successfully.",
-		"path":   store.Path(),
+		"result": "Plan written successfully. Use read_plan to view it.",
 	}, nil
 }
 
@@ -246,7 +243,7 @@ type ReadPlanTool struct {
 
 func (t *ReadPlanTool) Name() string { return "read_plan" }
 func (t *ReadPlanTool) Description() string {
-	return "Reads the current runtime implementation plan from Falken internal state."
+	return "Reads the current runtime implementation plan from Falken internal state. Use this tool instead of trying to read the plan file path directly."
 }
 func (t *ReadPlanTool) IsLongRunning() bool { return false }
 
@@ -259,7 +256,7 @@ func (t *ReadPlanTool) Definition() openai.FunctionDefinition {
 			Properties: map[string]jsonschema.Definition{
 				"IncludePath": {
 					Type:        jsonschema.Boolean,
-					Description: "Whether to include the internal state path in the result. Defaults to true.",
+					Description: "Whether to include the internal state path in the result. Defaults to false.",
 				},
 			},
 		},
@@ -277,13 +274,12 @@ func (t *ReadPlanTool) Run(ctx context.Context, args any) (map[string]any, error
 		return map[string]any{"error": "Failed to read plan: " + err.Error()}, nil
 	}
 
-	includePath := true
+	includePath := false
 	if m, ok := args.(map[string]any); ok {
 		if val, ok := m["IncludePath"].(bool); ok {
 			includePath = val
 		}
 	}
-
 	if content == "" {
 		res := map[string]any{"result": "No plan has been written yet."}
 		if includePath {

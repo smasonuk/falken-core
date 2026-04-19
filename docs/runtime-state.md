@@ -29,6 +29,38 @@ All session state lives under `.falken/state/current/` (relative to the workspac
   backups/                   # File backup snapshots
 ```
 
+## Model-visible state and internal paths
+
+The runtime stores internal artifacts under `.falken/state/current`, `.falken/cache`, and related directories. These paths are implementation details and should not be exposed to the LLM in tool outputs, memory, or system prompts.
+
+The LLM may not be able to access these paths because:
+- `.falken/state/**` is blocked by default permissions.
+- `.falken` is excluded from sandbox snapshots.
+- Runtime state is not part of the editable workspace diff.
+- Some paths exist only on the host side, not inside the sandbox.
+
+Prefer exposing:
+- content,
+- summaries,
+- booleans such as `has_result`,
+- semantic tools such as `read_plan`,
+- opaque artifact IDs for host inspection.
+
+Avoid exposing:
+- `plan_path`,
+- `result_path`,
+- absolute host paths,
+- `.falken/state/...`,
+- `.falken/cache/...`.
+
+### Preferred patterns
+
+Use `read_plan` to retrieve the current plan.
+
+Use `TaskGet` to retrieve delegated task result or plan content.
+
+Use artifact IDs in truncation messages rather than filesystem paths.
+
 ## Plan State
 
 | Path | API | Description |

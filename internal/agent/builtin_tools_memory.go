@@ -69,10 +69,6 @@ func (t *UpdateMemoryTool) Definition() openai.FunctionDefinition {
 					},
 					Description: "List of questions that have been resolved and should be removed.",
 				},
-				"PlanPath": {
-					Type:        jsonschema.String,
-					Description: "Path to the active markdown plan file, if any. Replaces existing path.",
-				},
 			},
 		},
 	}
@@ -91,10 +87,6 @@ func (t *UpdateMemoryTool) Run(ctx context.Context, args any) (map[string]any, e
 
 	if goal, ok := m["CurrentGoal"].(string); ok && goal != "" {
 		mem.CurrentGoal = goal
-	}
-
-	if path, ok := m["PlanPath"].(string); ok && path != "" {
-		mem.PlanPath = path
 	}
 
 	if addFiles, ok := m["AddImportantFiles"].([]any); ok {

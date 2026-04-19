@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/smasonuk/falken-core/internal/extensions"
@@ -53,6 +54,7 @@ type Runner struct {
 	mu            sync.Mutex
 	Mode          RunnerMode
 	PlanInitiator PlanInitiator
+	RunShouldStop bool
 	Shell         *host.StatefulShell
 	Paths         runtimeapi.Paths
 	Interactions  runtimeapi.InteractionHandler
@@ -378,6 +380,10 @@ func (r *Runner) Run(ctx context.Context, prompt string, eventChan chan<- any) (
 
 	r.prepareHistory(prompt)
 
+	lastTurnHadMutatingTool := false
+	dirtySinceVerification := false
+	verificationRanSinceMutation := false
+
 	for {
 		r.history.compactHistory(r)
 		r.history.refreshMemoryPrompt(r)
@@ -406,15 +412,79 @@ func (r *Runner) Run(ctx context.Context, prompt string, eventChan chan<- any) (
 		r.appendToLog(assistantMsg)
 
 		if finishReason != openai.FinishReasonToolCalls && len(toolCalls) == 0 {
+			trimmedContent := strings.TrimSpace(fullContent)
+
+			if trimmedContent == "" && lastTurnHadMutatingTool {
+				nudge := openai.ChatCompletionMessage{
+					Role: openai.ChatMessageRoleUser,
+					Content: "You just modified files but returned no response. Continue from the current state: update todos, run verification, and only finish after the code is verified.",
+				}
+				r.History = append(r.History, nudge)
+				r.appendToLog(nudge)
+				continue
+			}
+
+			if dirtySinceVerification && !verificationRanSinceMutation {
+				nudge := openai.ChatCompletionMessage{
+					Role:    openai.ChatMessageRoleUser,
+					Content: "You have modified files since the last verification. Run the project compiler, tests, or linter before finishing.",
+				}
+				r.History = append(r.History, nudge)
+				r.appendToLog(nudge)
+				continue
+			}
+
+			todos, _ := r.todoStore.Read()
+			if hasOpenTodos(todos) {
+				nudge := openai.ChatCompletionMessage{
+					Role: openai.ChatMessageRoleUser,
+					Content: "Your TodoWrite checklist still has pending or in-progress items. Continue working, update the checklist, verify the work, and only finish when all todos are completed.",
+				}
+				r.History = append(r.History, nudge)
+				r.appendToLog(nudge)
+				continue
+			}
+
 			r.logger.Println("=== AGENT TURN COMPLETE ===")
 			break
 		}
 
 		// Execute tools
+		lastTurnHadMutatingTool = false
 		for _, tc := range toolCalls {
+			if isMutatingTool(tc.Function.Name) {
+				lastTurnHadMutatingTool = true
+				dirtySinceVerification = true
+				verificationRanSinceMutation = false
+			}
+
 			toolMsg := r.executeToolCall(ctx, tc, eventChan)
+
+			// If it was execute_command and it didn't return an error, consider verification ran
+			if tc.Function.Name == "execute_command" && dirtySinceVerification {
+				// We check if the result does NOT contain "Error:"
+				// toolMsg.Content is the JSON result
+				var toolRes map[string]any
+				if err := json.Unmarshal([]byte(toolMsg.Content), &toolRes); err == nil {
+					if resStr, ok := toolRes["result"].(string); ok {
+						if !strings.HasPrefix(resStr, "Error:") {
+							verificationRanSinceMutation = true
+						}
+					}
+				}
+			}
+
 			r.History = append(r.History, toolMsg)
 			r.appendToLog(toolMsg)
+		}
+
+		r.mu.Lock()
+		submitted := r.RunShouldStop
+		r.mu.Unlock()
+
+		if submitted {
+			r.logger.Println("=== AGENT TURN COMPLETE: submitted ===")
+			break
 		}
 	}
 
@@ -450,4 +520,22 @@ func parseArgs(args string) map[string]any {
 	var m map[string]any
 	json.Unmarshal([]byte(args), &m)
 	return m
+}
+
+func isMutatingTool(name string) bool {
+	switch name {
+	case "write_file", "edit_file", "multi_edit", "apply_patch":
+		return true
+	default:
+		return false
+	}
+}
+
+func hasOpenTodos(items []todo.TodoItem) bool {
+	for _, item := range items {
+		if item.Status == todo.TodoPending || item.Status == todo.TodoInProgress {
+			return true
+		}
+	}
+	return false
 }
