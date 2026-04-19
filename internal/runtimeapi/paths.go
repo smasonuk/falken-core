@@ -44,7 +44,7 @@ func NewPaths(workspaceDir, stateDir string) (Paths, error) {
 }
 
 // EnsureStateDirs creates the directory structure expected by runtime subsystems.
-func (p Paths) EnsureStateDirs() error {
+func (p Paths) EnsureStateDirs(migrate bool) error {
 	// Create base directories first
 	dirs := []string{
 		p.StateDir,
@@ -58,37 +58,37 @@ func (p Paths) EnsureStateDirs() error {
 		}
 	}
 
-	// if migrate {
-	// 	// Migrate legacy paths to .falken/state/current/
-	// 	legacyMap := map[string]string{
-	// 		filepath.Join(p.StateDir, "history.jsonl"): p.HistoryPath(),
-	// 		filepath.Join(p.StateDir, "memory.json"):  p.MemoryPath(),
-	// 		filepath.Join(p.StateDir, "tasks.json"):   p.TasksPath(),
-	// 		filepath.Join(p.StateDir, "tasks"):        p.TasksDir(),
-	// 		filepath.Join(p.StateDir, "todos.json"):   p.TodosPath(),
-	// 	}
+	if migrate {
+		// Migrate legacy paths to .falken/state/current/
+		legacyMap := map[string]string{
+			filepath.Join(p.StateDir, "history.jsonl"): p.HistoryPath(),
+			filepath.Join(p.StateDir, "memory.json"):  p.MemoryPath(),
+			filepath.Join(p.StateDir, "tasks.json"):   p.TasksPath(),
+			filepath.Join(p.StateDir, "tasks"):        p.TasksDir(),
+			filepath.Join(p.StateDir, "todos.json"):   p.TodosPath(),
+		}
 
-	// 	for legacy, current := range legacyMap {
-	// 		if _, err := os.Stat(legacy); err != nil {
-	// 			if os.IsNotExist(err) {
-	// 				continue
-	// 			}
-	// 			return err
-	// 		}
+		for legacy, current := range legacyMap {
+			if _, err := os.Stat(legacy); err != nil {
+				if os.IsNotExist(err) {
+					continue
+				}
+				return err
+			}
 
-	// 		// If destination already exists, skip migration for this file/dir.
-	// 		if _, err := os.Stat(current); err == nil {
-	// 			continue
-	// 		} else if !os.IsNotExist(err) {
-	// 			return err
-	// 		}
+			// If destination already exists, skip migration for this file/dir.
+			if _, err := os.Stat(current); err == nil {
+				continue
+			} else if !os.IsNotExist(err) {
+				return err
+			}
 
-	// 		// Perform migration.
-	// 		if err := os.Rename(legacy, current); err != nil {
-	// 			return err
-	// 		}
-	// 	}
-	// }
+			// Perform migration.
+			if err := os.Rename(legacy, current); err != nil {
+				return err
+			}
+		}
+	}
 
 	// Ensure subdirectories are created if they didn't exist or migrate
 	subDirs := []string{
@@ -135,6 +135,13 @@ func (p Paths) HistoryPath() string {
 // MemoryPath returns the path used for persisted agent memory.
 func (p Paths) MemoryPath() string {
 	return filepath.Join(p.CurrentStateDir(), "memory.json")
+}
+
+// PlanPath returns the internal runtime plan path for this runner.
+// Plans are runtime state, not workspace artifacts, and should not be written
+// through workspace file tools.
+func (p Paths) PlanPath() string {
+	return filepath.Join(p.CurrentStateDir(), "plan.md")
 }
 
 // TasksPath returns the path used for the task index file.

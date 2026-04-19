@@ -278,7 +278,7 @@ func TestSessionResetConversationStateRemovesPersistedState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPaths failed: %v", err)
 	}
-	if err := paths.EnsureStateDirs(); err != nil {
+	if err := paths.EnsureStateDirs(false); err != nil {
 		t.Fatalf("EnsureStateDirs failed: %v", err)
 	}
 

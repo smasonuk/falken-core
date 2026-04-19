@@ -5,5 +5,5 @@ import (
 )
 
 func PrepareRuntimeState(paths runtimeapi.Paths) error {
-	return paths.EnsureStateDirs()
+	return paths.EnsureStateDirs(false)
 }

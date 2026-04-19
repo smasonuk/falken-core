@@ -240,6 +240,9 @@ func (s *TaskStore) UpdateTask(id string, patch TaskPatch) error {
 		if patch.ResultPath != nil {
 			task.ResultPath = *patch.ResultPath
 		}
+		if patch.PlanPath != nil {
+			task.PlanPath = *patch.PlanPath
+		}
 		if patch.DependsOn != nil {
 			dependsOn := *patch.DependsOn
 			// Check for circular dependencies

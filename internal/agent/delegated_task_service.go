@@ -58,7 +58,7 @@ func newDelegatedTaskService(runner *Runner) *delegatedTaskService {
 func (s *delegatedTaskService) Launch(ctx context.Context, req delegatedTaskRequest) (map[string]any, error) {
 	subRunID := fmt.Sprintf("subagent_%d", time.Now().UnixNano())
 	subPaths := s.runner.Paths.SubRunPaths(subRunID)
-	if err := subPaths.EnsureStateDirs(); err != nil {
+	if err := subPaths.EnsureStateDirs(false); err != nil {
 		return nil, fmt.Errorf("failed to initialize delegated task state: %v", err)
 	}
 
@@ -171,15 +171,28 @@ func (s *delegatedTaskService) handleSubAgentCompletion(launch *delegatedTaskLau
 	resultPath := filepath.Join(taskDir, "result.md")
 	_ = os.WriteFile(resultPath, []byte(output), 0644)
 
+	// Copy subagent plan if it exists
+	subPlanPath := launch.subPaths.PlanPath()
+	copiedPlanPath := ""
+	if planBytes, err := os.ReadFile(subPlanPath); err == nil && len(strings.TrimSpace(string(planBytes))) > 0 {
+		taskPlanPath := filepath.Join(taskDir, "plan.md")
+		_ = os.WriteFile(taskPlanPath, planBytes, 0644)
+		copiedPlanPath = taskPlanPath
+	}
+
 	if runErr != nil {
 		s.runner.logger.Printf("Sub-agent %s failed: %v", launch.taskID, runErr)
 		failed := tasks.StatusFailed
 		lastError := "Failed fatally: " + runErr.Error()
-		_ = s.runner.taskStore.UpdateTask(launch.taskID, tasks.TaskPatch{
+		patch := tasks.TaskPatch{
 			Status:     &failed,
 			LastError:  &lastError,
 			ResultPath: &resultPath,
-		})
+		}
+		if copiedPlanPath != "" {
+			patch.PlanPath = &copiedPlanPath
+		}
+		_ = s.runner.taskStore.UpdateTask(launch.taskID, patch)
 		return
 	}
 
@@ -192,11 +205,15 @@ func (s *delegatedTaskService) handleSubAgentCompletion(launch *delegatedTaskLau
 		s.runner.logger.Printf("Failed to create verifier for %s: %v", launch.taskID, verifyErr)
 		completed := tasks.StatusCompleted
 		summary := "Verification skipped due to error."
-		_ = s.runner.taskStore.UpdateTask(launch.taskID, tasks.TaskPatch{
+		patch := tasks.TaskPatch{
 			Status:     &completed,
 			Summary:    &summary,
 			ResultPath: &resultPath,
-		})
+		}
+		if copiedPlanPath != "" {
+			patch.PlanPath = &copiedPlanPath
+		}
+		_ = s.runner.taskStore.UpdateTask(launch.taskID, patch)
 		return
 	}
 
@@ -207,22 +224,30 @@ func (s *delegatedTaskService) handleSubAgentCompletion(launch *delegatedTaskLau
 		s.runner.logger.Printf("Sub-agent %s PASSED verification.", launch.taskID)
 		completed := tasks.StatusCompleted
 		summary := "VERIFIED ✅"
-		_ = s.runner.taskStore.UpdateTask(launch.taskID, tasks.TaskPatch{
+		patch := tasks.TaskPatch{
 			Status:     &completed,
 			Summary:    &summary,
 			ResultPath: &resultPath,
-		})
+		}
+		if copiedPlanPath != "" {
+			patch.PlanPath = &copiedPlanPath
+		}
+		_ = s.runner.taskStore.UpdateTask(launch.taskID, patch)
 		return
 	}
 
 	s.runner.logger.Printf("Sub-agent %s FAILED verification. Kicking back.", launch.taskID)
 	failed := tasks.StatusFailed
 	lastError := "FAILED QA ❌ See verify.md for details."
-	_ = s.runner.taskStore.UpdateTask(launch.taskID, tasks.TaskPatch{
+	patch := tasks.TaskPatch{
 		Status:     &failed,
 		LastError:  &lastError,
 		ResultPath: &resultPath,
-	})
+	}
+	if copiedPlanPath != "" {
+		patch.PlanPath = &copiedPlanPath
+	}
+	_ = s.runner.taskStore.UpdateTask(launch.taskID, patch)
 }
 
 func (s *delegatedTaskService) runVerification(launch *delegatedTaskLaunch, output string) (string, error) {

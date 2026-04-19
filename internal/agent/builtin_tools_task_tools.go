@@ -148,6 +148,8 @@ func (t *TaskListTool) Run(ctx context.Context, args any) (map[string]any, error
 			"subject":    task.Subject,
 			"status":     task.Status,
 			"depends_on": task.DependsOn,
+			"result_path": task.ResultPath,
+			"plan_path":   task.PlanPath,
 			"last_error": task.LastError,
 		}
 
@@ -270,6 +272,10 @@ func (t *TaskUpdateTool) Definition() openai.FunctionDefinition {
 					Type:        jsonschema.String,
 					Description: "Path to the file containing the task result.",
 				},
+				"PlanPath": {
+					Type:        jsonschema.String,
+					Description: "Path to the file containing the task plan.",
+				},
 				"DependsOn": {
 					Type: jsonschema.Array,
 					Items: &jsonschema.Definition{
@@ -315,6 +321,9 @@ func (t *TaskUpdateTool) Run(ctx context.Context, args any) (map[string]any, err
 	}
 	if resultPath, ok := m["ResultPath"].(string); ok {
 		patch.ResultPath = &resultPath
+	}
+	if planPath, ok := m["PlanPath"].(string); ok {
+		patch.PlanPath = &planPath
 	}
 	if dependsOn, ok := m["DependsOn"].([]any); ok {
 		var deps []string

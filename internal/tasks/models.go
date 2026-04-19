@@ -21,6 +21,7 @@ type Task struct {
 	ParentTaskID string     `json:"parent_task_id,omitempty"`
 	SessionID    string     `json:"session_id,omitempty"`
 	ResultPath   string     `json:"result_path,omitempty"`
+	PlanPath     string     `json:"plan_path,omitempty"`
 	Summary      string     `json:"summary,omitempty"`
 	LastError    string     `json:"last_error,omitempty"`
 	RetryCount   int        `json:"retry_count,omitempty"`
@@ -38,5 +39,6 @@ type TaskPatch struct {
 	Summary     *string
 	LastError   *string
 	ResultPath  *string
+	PlanPath    *string
 	DependsOn   *[]string
 }

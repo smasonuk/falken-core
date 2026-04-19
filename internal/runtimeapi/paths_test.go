@@ -95,10 +95,10 @@ func TestSubRunPaths_MemoryIsolation(t *testing.T) {
 	}
 	child := parent.SubRunPaths("child-run")
 
-	if err := parent.EnsureStateDirs(); err != nil {
+	if err := parent.EnsureStateDirs(false); err != nil {
 		t.Fatalf("parent EnsureStateDirs failed: %v", err)
 	}
-	if err := child.EnsureStateDirs(); err != nil {
+	if err := child.EnsureStateDirs(false); err != nil {
 		t.Fatalf("child EnsureStateDirs failed: %v", err)
 	}
 
@@ -161,7 +161,7 @@ func TestEnsureStateDirs_MigratesLegacyPaths(t *testing.T) {
 	}
 
 	// Run EnsureStateDirs (which triggers migration)
-	if err := p.EnsureStateDirs(); err != nil {
+	if err := p.EnsureStateDirs(true); err != nil {
 		t.Fatalf("EnsureStateDirs failed: %v", err)
 	}
 

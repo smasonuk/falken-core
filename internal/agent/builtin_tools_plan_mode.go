@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/smasonuk/falken-core/internal/runtimeapi"
@@ -23,7 +22,7 @@ func (t *EnterPlanModeTool) Description() string {
 
 CRITICAL USAGE RULES:
 1. Read-Only State: Entering this mode instantly disables your ability to edit files or run shell commands. 
-2. Goal: Your objective is to use 'glob', 'grep', and 'read_file' to explore the codebase, then use 'write_file' to write a Markdown architecture plan to '.agent_plan.md'.
+2. Goal: Your objective is to use 'glob', 'grep', and 'read_file' to explore the codebase, then use 'write_plan' to write a Markdown architecture plan into Falken runtime state.
 3. When to Use: Mandatory for multi-file features, complex refactors, or anytime you are unfamiliar with the codebase structure. Do not use for simple 1-line bug fixes.`
 }
 func (t *EnterPlanModeTool) IsLongRunning() bool { return false }
@@ -48,15 +47,17 @@ func (t *EnterPlanModeTool) Run(ctx context.Context, args any) (map[string]any, 
 	t.runner.mu.Lock()
 	if t.runner.Mode == ModePlan {
 		t.runner.mu.Unlock()
-		return map[string]any{"result": "You are already in plan mode. Proceed with exploration and write your plan to .agent_plan.md."}, nil
+		return map[string]any{"result": "You are already in plan mode. Proceed with exploration and write your plan using the write_plan tool."}, nil
 	}
 
 	t.runner.Mode = ModePlan
 	t.runner.PlanInitiator = PlanInitiatorAgent
 	t.runner.mu.Unlock()
 
-	// Initialize/clear the scratchpad file
-	os.WriteFile(".agent_plan.md", []byte("# Implementation Plan\n\n"), 0644)
+	// Initialize the plan
+	if err := t.runner.planStore.Write("# Implementation Plan\n\n"); err != nil {
+		return map[string]any{"error": "Failed to initialize plan: " + err.Error()}, nil
+	}
 
 	return map[string]any{
 		"result": `Entered plan mode. You should now focus on exploring the codebase and designing an implementation approach.
@@ -64,8 +65,8 @@ func (t *EnterPlanModeTool) Run(ctx context.Context, args any) (map[string]any, 
     In plan mode, you should:
     1. Thoroughly explore the codebase using read tools.
     2. Consider multiple approaches and their trade-offs.
-    3. Write your concrete implementation strategy to the '.agent_plan.md' file.
-    4. When your plan is fully written to that file, use the 'exit_plan_mode' tool.
+    3. Write your concrete implementation strategy using the 'write_plan' tool.
+    4. When your plan is fully written, use the 'exit_plan_mode' tool.
     
     Remember: DO NOT write or edit any other files yet. This is a read-only exploration phase.`,
 	}, nil
@@ -78,7 +79,7 @@ type ExitPlanModeTool struct {
 
 func (t *ExitPlanModeTool) Name() string { return "exit_plan_mode" }
 func (t *ExitPlanModeTool) Description() string {
-	return "Exits plan mode so you can start coding. Use this ONLY after you have written your complete plan to .agent_plan.md."
+	return "Exits plan mode so you can start coding. Use this ONLY after you have written your complete plan with 'write_plan'."
 }
 func (t *ExitPlanModeTool) IsLongRunning() bool { return false }
 
@@ -103,13 +104,11 @@ func (t *ExitPlanModeTool) Run(ctx context.Context, args any) (map[string]any, e
 		return map[string]any{"error": "You are not in plan mode. Continue with your task."}, nil
 	}
 
-	planPath := ".agent_plan.md"
-	planBytes, err := os.ReadFile(planPath)
-	if err != nil || len(planBytes) == 0 {
-		return map[string]any{"error": "Could not read plan file or file is empty. Please write your plan to " + planPath + " first."}, nil
+	planPath := t.runner.planStore.Path()
+	planContent, err := t.runner.planStore.Read()
+	if err != nil || strings.TrimSpace(planContent) == "" {
+		return map[string]any{"error": "Could not read plan or plan is empty. Please write your plan first using write_plan."}, nil
 	}
-
-	planContent := string(planBytes)
 
 	if len(planContent) < 100 {
 		return map[string]any{"error": "Plan is too short. Please write a detailed architectural plan with Files, Changes, and Verification sections."}, nil
@@ -127,8 +126,7 @@ func (t *ExitPlanModeTool) Run(ctx context.Context, args any) (map[string]any, e
 	updateMemoryOnPlanExit := func() {
 		if mem, err := t.runner.memoryStore.Read(); err == nil {
 			mem.PlanPath = planPath
-			mem.ImportantFiles = mergeUniqueStrings(mem.ImportantFiles, []string{planPath})
-			mem.Decisions = mergeUniqueStrings(mem.Decisions, []string{"Formulated implementation plan in " + planPath})
+			mem.Decisions = mergeUniqueStrings(mem.Decisions, []string{"Formulated implementation plan"})
 			t.runner.memoryStore.Write(mem)
 		}
 	}
@@ -153,7 +151,7 @@ func (t *ExitPlanModeTool) Run(ctx context.Context, args any) (map[string]any, e
 			updateMemoryOnPlanExit()
 			return map[string]any{"result": fmt.Sprintf("User has approved your plan. You can now start coding.\n\nApproved Plan:\n%s", planContent)}, nil
 		} else {
-			return map[string]any{"result": fmt.Sprintf("User rejected the plan with the following feedback:\n%s\n\nPlease update the plan in %s based on this feedback and call exit_plan_mode again.", response.Feedback, planPath)}, nil
+			return map[string]any{"result": fmt.Sprintf("User rejected the plan with the following feedback:\n%s\n\nPlease update the plan using write_plan based on this feedback and call exit_plan_mode again.", response.Feedback)}, nil
 		}
 	} else {
 		// Agent initiated plan mode, auto-approve
@@ -164,4 +162,116 @@ func (t *ExitPlanModeTool) Run(ctx context.Context, args any) (map[string]any, e
 		updateMemoryOnPlanExit()
 		return map[string]any{"result": fmt.Sprintf("Plan successfully documented. You have exited plan mode and may now begin executing the plan.\n\nPlan:\n%s", planContent)}, nil
 	}
+}
+
+// WritePlanTool is the only write operation allowed during plan mode.
+type WritePlanTool struct {
+	runner *Runner
+}
+
+func (t *WritePlanTool) Name() string { return "write_plan" }
+func (t *WritePlanTool) Description() string {
+	return `Writes or replaces the current runtime implementation plan.
+
+Use this in plan mode after exploring the codebase. The plan should be Markdown and should include:
+- Goal
+- Files
+- Changes
+- Verification
+- Risks / Rollback
+
+This tool writes to Falken internal runtime state, not to the workspace. Do not use write_file for implementation plans.`
+}
+func (t *WritePlanTool) IsLongRunning() bool { return false }
+
+func (t *WritePlanTool) Definition() openai.FunctionDefinition {
+	return openai.FunctionDefinition{
+		Name:        t.Name(),
+		Description: t.Description(),
+		Parameters: jsonschema.Definition{
+			Type: jsonschema.Object,
+			Properties: map[string]jsonschema.Definition{
+				"Content": {
+					Type:        jsonschema.String,
+					Description: "The full Markdown content of the implementation plan.",
+				},
+			},
+			Required: []string{"Content"},
+		},
+	}
+}
+
+func (t *WritePlanTool) Run(ctx context.Context, args any) (map[string]any, error) {
+	m, ok := args.(map[string]any)
+	if !ok {
+		return map[string]any{"error": "Invalid arguments"}, nil
+	}
+	content, _ := m["Content"].(string)
+	if strings.TrimSpace(content) == "" {
+		return map[string]any{"error": "Content cannot be empty"}, nil
+	}
+
+	if err := t.runner.planStore.Write(content); err != nil {
+		return map[string]any{"error": "Failed to write plan: " + err.Error()}, nil
+	}
+
+	return map[string]any{
+		"result": "Plan written successfully.",
+		"path":   t.runner.planStore.Path(),
+	}, nil
+}
+
+// ReadPlanTool
+type ReadPlanTool struct {
+	runner *Runner
+}
+
+func (t *ReadPlanTool) Name() string { return "read_plan" }
+func (t *ReadPlanTool) Description() string {
+	return "Reads the current runtime implementation plan from Falken internal state."
+}
+func (t *ReadPlanTool) IsLongRunning() bool { return false }
+
+func (t *ReadPlanTool) Definition() openai.FunctionDefinition {
+	return openai.FunctionDefinition{
+		Name:        t.Name(),
+		Description: t.Description(),
+		Parameters: jsonschema.Definition{
+			Type: jsonschema.Object,
+			Properties: map[string]jsonschema.Definition{
+				"IncludePath": {
+					Type:        jsonschema.Boolean,
+					Description: "Whether to include the internal state path in the result. Defaults to true.",
+				},
+			},
+		},
+	}
+}
+
+func (t *ReadPlanTool) Run(ctx context.Context, args any) (map[string]any, error) {
+	content, err := t.runner.planStore.Read()
+	if err != nil {
+		return map[string]any{"error": "Failed to read plan: " + err.Error()}, nil
+	}
+
+	includePath := true
+	if m, ok := args.(map[string]any); ok {
+		if val, ok := m["IncludePath"].(bool); ok {
+			includePath = val
+		}
+	}
+
+	if content == "" {
+		res := map[string]any{"result": "No plan has been written yet."}
+		if includePath {
+			res["path"] = t.runner.planStore.Path()
+		}
+		return res, nil
+	}
+
+	res := map[string]any{"result": content}
+	if includePath {
+		res["path"] = t.runner.planStore.Path()
+	}
+	return res, nil
 }

@@ -136,7 +136,7 @@ The runner supports multiple modes:
 - `default`
   Normal coding mode.
 - `plan`
-  Mostly read-only exploration mode. The only allowed write is the `.agent_plan.md` scratch file.
+  Mostly read-only exploration mode. The only allowed write is the internal implementation plan via `write_plan`.
 - `verify`
   Read plus command execution only.
 - `explore`

@@ -58,7 +58,7 @@ func NewSession(cfg Config) (*Session, error) {
 		return nil, fmt.Errorf("invalid state mode %q", cfg.StateMode)
 	}
 
-	if err := paths.EnsureStateDirs(); err != nil { //cfg.StateMode == StateModeResume
+	if err := paths.EnsureStateDirs(cfg.StateMode == StateModeResume); err != nil {
 		return nil, err
 	}
 
@@ -262,7 +262,7 @@ func (s *Session) ResetConversationState() error {
 		return err
 	}
 
-	if err := s.paths.EnsureStateDirs(); err != nil {
+	if err := s.paths.EnsureStateDirs(false); err != nil {
 		return err
 	}
 
@@ -278,12 +278,7 @@ func (s *Session) ResetConversationState() error {
 // ForcePlanMode puts the underlying runner into plan mode.
 // This is primarily intended for host frontends such as the TUI.
 func (s *Session) ForcePlanMode(userInitiated bool) {
-	s.runner.Mode = agent.ModePlan
-	if userInitiated {
-		s.runner.PlanInitiator = agent.PlanInitiatorUser
-		return
-	}
-	s.runner.PlanInitiator = agent.PlanInitiatorAgent
+	s.runner.ForcePlanMode(userInitiated)
 }
 
 // PermissionsConfig returns the active permissions configuration for the session.

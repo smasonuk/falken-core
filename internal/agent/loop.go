@@ -49,6 +49,7 @@ type Runner struct {
 	taskStore     *tasks.TaskStore
 	todoStore     *todo.TodoStore
 	memoryStore   *MemoryStore
+	planStore     *PlanStore
 	mu            sync.Mutex
 	Mode          RunnerMode
 	PlanInitiator PlanInitiator
@@ -108,6 +109,7 @@ func NewRunner(opts RunnerOptions) (*Runner, error) {
 		taskStore:    tasks.NewTaskStore(paths.TasksPath()),
 		todoStore:    todo.NewTodoStore(paths.TodosPath()),
 		memoryStore:  NewMemoryStore(paths.MemoryPath()),
+		planStore:    NewPlanStore(paths.PlanPath()),
 		Mode:         ModeDefault,
 		Shell:        shell,
 		Paths:        paths,
@@ -122,7 +124,7 @@ func NewRunner(opts RunnerOptions) (*Runner, error) {
 	}
 
 	_ = os.MkdirAll(paths.StateDir, 0755)
-	_ = paths.EnsureStateDirs()
+	_ = paths.EnsureStateDirs(false)
 	if r.ToolDir == "" && paths.WorkspaceDir != "" {
 		r.ToolDir = filepath.Join(paths.WorkspaceDir, "tools")
 	}
@@ -254,6 +256,8 @@ func NewRunner(opts RunnerOptions) (*Runner, error) {
 	planTools := []any{
 		&EnterPlanModeTool{runner: r},
 		&ExitPlanModeTool{runner: r},
+		&WritePlanTool{runner: r},
+		&ReadPlanTool{runner: r},
 		&UpdateMemoryTool{runner: r},
 		&SubmitTaskTool{runner: r},
 	}
@@ -307,6 +311,22 @@ func (r *Runner) ClearHistory() {
 	r.History = nil
 }
 
+// ForcePlanMode puts the runner into plan mode and initializes the plan.
+func (r *Runner) ForcePlanMode(userInitiated bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.Mode = ModePlan
+	if userInitiated {
+		r.PlanInitiator = PlanInitiatorUser
+	} else {
+		r.PlanInitiator = PlanInitiatorAgent
+	}
+
+	// Initialize the plan
+	_ = r.planStore.Write("# Implementation Plan\n\n")
+}
+
 // ResetConversationState reinitializes the runner's stores with new paths.
 func (r *Runner) ResetConversationState(paths runtimeapi.Paths) error {
 	r.mu.Lock()
@@ -317,6 +337,7 @@ func (r *Runner) ResetConversationState(paths runtimeapi.Paths) error {
 	r.taskStore = tasks.NewTaskStore(paths.TasksPath())
 	r.todoStore = todo.NewTodoStore(paths.TodosPath())
 	r.memoryStore = NewMemoryStore(paths.MemoryPath())
+	r.planStore = NewPlanStore(paths.PlanPath())
 	r.Paths = paths
 
 	return nil

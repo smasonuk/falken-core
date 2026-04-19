@@ -19,12 +19,12 @@ func TestModePolicy_BlocksWriteInPlanMode(t *testing.T) {
 	}
 }
 
-func TestModePolicy_AllowsPlanFileInPlanMode(t *testing.T) {
+func TestModePolicy_AllowsWritePlanInPlanMode(t *testing.T) {
 	policy := &modePolicy{}
 	r := &Runner{Mode: ModePlan}
 
-	if _, blocked := policy.blockedToolMessage(r, "write_file", map[string]any{"Path": ".agent_plan.md"}); blocked {
-		t.Fatalf("expected .agent_plan.md write to be allowed in plan mode")
+	if _, blocked := policy.blockedToolMessage(r, "write_plan", map[string]any{}); blocked {
+		t.Fatalf("expected write_plan write to be allowed in plan mode")
 	}
 }
 
