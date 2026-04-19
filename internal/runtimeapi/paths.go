@@ -45,45 +45,92 @@ func NewPaths(workspaceDir, stateDir string) (Paths, error) {
 
 // EnsureStateDirs creates the directory structure expected by runtime subsystems.
 func (p Paths) EnsureStateDirs() error {
+	// Create base directories first
 	dirs := []string{
 		p.StateDir,
+		p.CurrentStateDir(),
 		p.CacheDir(),
 		p.TruncationDir(),
 		p.BackupDir(),
 		p.PluginStateDir(),
-		p.TasksDir(),
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return err
 		}
 	}
+
+	// Migrate legacy paths to .falken/state/current/
+	legacyMap := map[string]string{
+		filepath.Join(p.StateDir, "history.jsonl"): p.HistoryPath(),
+		filepath.Join(p.StateDir, "memory.json"):  p.MemoryPath(),
+		filepath.Join(p.StateDir, "tasks.json"):   p.TasksPath(),
+		filepath.Join(p.StateDir, "tasks"):        p.TasksDir(),
+		filepath.Join(p.StateDir, "todos.json"):   p.TodosPath(),
+	}
+
+	for legacy, current := range legacyMap {
+		if _, err := os.Stat(legacy); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return err
+		}
+
+		// If destination already exists, skip migration for this file/dir.
+		if _, err := os.Stat(current); err == nil {
+			continue
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+
+		// Perform migration.
+		if err := os.Rename(legacy, current); err != nil {
+			return err
+		}
+	}
+
+	// Ensure any remaining directories (like tasks) are created if they didn't exist or migrate
+	if err := os.MkdirAll(p.TasksDir(), 0755); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+
+// CurrentStateDir returns the directory used for the current session's persisted state.
+func (p Paths) CurrentStateDir() string {
+	target := filepath.Join("state", "current")
+	if strings.HasSuffix(filepath.ToSlash(p.StateDir), target) {
+		return p.StateDir
+	}
+	return filepath.Join(p.StateDir, target)
 }
 
 // HistoryPath returns the persisted conversation history path.
 func (p Paths) HistoryPath() string {
-	return filepath.Join(p.StateDir, "history.jsonl")
+	return filepath.Join(p.CurrentStateDir(), "history.jsonl")
 }
 
 // MemoryPath returns the path used for persisted agent memory.
 func (p Paths) MemoryPath() string {
-	return filepath.Join(p.StateDir, "memory.json")
+	return filepath.Join(p.CurrentStateDir(), "memory.json")
 }
 
 // TasksPath returns the path used for the task index file.
 func (p Paths) TasksPath() string {
-	return filepath.Join(p.StateDir, "tasks.json")
+	return filepath.Join(p.CurrentStateDir(), "tasks.json")
 }
 
 // TasksDir returns the directory that stores task-specific artifacts.
 func (p Paths) TasksDir() string {
-	return filepath.Join(p.StateDir, "tasks")
+	return filepath.Join(p.CurrentStateDir(), "tasks")
 }
 
 // TodosPath returns the path used for persisted todo items.
 func (p Paths) TodosPath() string {
-	return filepath.Join(p.StateDir, "todos.json")
+	return filepath.Join(p.CurrentStateDir(), "todos.json")
 }
 
 // CacheDir returns the root cache directory for transient runtime files.

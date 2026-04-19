@@ -22,7 +22,8 @@ func TestNewPathsDefaultsStateDirUnderWorkspace(t *testing.T) {
 		t.Fatalf("expected state dir %q, got %q", wantState, paths.StateDir)
 	}
 
-	if paths.TasksPath() != filepath.Join(wantState, "tasks.json") {
+	expectedTasks := filepath.Join(wantState, "state", "current", "tasks.json")
+	if paths.TasksPath() != expectedTasks {
 		t.Fatalf("unexpected tasks path: %s", paths.TasksPath())
 	}
 }

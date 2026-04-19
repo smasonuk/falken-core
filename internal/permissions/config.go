@@ -25,6 +25,7 @@ var DefaultBlockedFiles = []string{
 	// Falken Internal Security
 	".falken.yaml",           // Prevent agent from elevating its own permissions
 	".falken/history*.jsonl", // Prevent agent from reading/corrupting its raw memory
+	".falken/state/**",       // Prevent agent from reading/corrupting runtime state
 	".falken/debug.log",
 	".falken/cache/*", // Protect the proxy cert and blackhole
 }
