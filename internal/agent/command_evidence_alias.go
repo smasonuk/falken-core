@@ -1,0 +1,19 @@
+package agent
+
+import "github.com/smasonuk/falken-core/internal/conversation"
+
+type CommandEvidenceRecord = conversation.CommandEvidenceRecord
+type CommandEvidenceState = conversation.CommandEvidenceState
+type CommandEvidenceReview = conversation.CommandEvidenceReview
+
+type CompletionBlocker = conversation.CompletionBlocker
+type ImplementationCompletionCheck = conversation.ImplementationCompletionCheck
+type CompletionWarning = conversation.CompletionWarning
+
+type CommandEvidenceManager = conversation.CommandEvidenceManager
+
+var NewCommandEvidenceManager = conversation.NewCommandEvidenceManager
+var ShouldRecordCommandEvidence = conversation.ShouldRecordCommandEvidence
+var CommandEvidenceRecordFromCommandResult = conversation.CommandEvidenceRecordFromCommandResult
+var ValidatePlanTodosComplete = conversation.ValidatePlanTodosComplete
+var CompletionDecisionFromReview = conversation.CompletionDecisionFromReview
