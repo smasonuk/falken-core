@@ -11,7 +11,7 @@ session, err := falken.New(falken.Config{
     ExecutionDetails: falken.ExecutionConfig{Mode: falken.ExecutionModeLocal}, // or provide Runtime for sandbox mode
     LLM:              myLLM,
     Events: func(event falken.Event) {
-        // Stream assistant text, tool calls/results, command chunks, and run events.
+        // Stream assistant text, tool calls/results, command chunks, and run events
     },
     OnCompleted: func(ctx context.Context, result falken.RunResult) error {
         // Optional host notification after normal completion.
