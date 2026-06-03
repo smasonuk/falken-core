@@ -4,6 +4,45 @@ Falken Core is the v1 runtime library for creating a workspace-scoped Falken ses
 
 ## Public Usage
 
+For simple embedded-agent use, prefer `NewAgent`. It creates and starts a local,
+in-memory session for you, disables automatic Plan-mode routing, and exposes
+only the tools you explicitly request.
+
+```go
+agent, err := falken.NewAgent(ctx, falken.AgentConfig{
+    LLM:          myLLM,
+    SystemPrompt: "Help with user account questions.",
+    Tools:        []falken.Tool{lookupUserTool},
+})
+if err != nil {
+    return err
+}
+defer agent.Close(ctx)
+
+answer, err := agent.Run(ctx, "Summarize this account")
+```
+
+`NewAgent` uses in-memory conversation state and local execution. With
+`ReadDirectory` set, it exposes read-only file tools rooted at that directory.
+Additional built-in capabilities are opt-in through `SimplePermissions`:
+
+```go
+agent, err := falken.NewAgent(ctx, falken.AgentConfig{
+    LLM:           myLLM,
+    SystemPrompt:  "Answer only using the docs directory.",
+    ReadDirectory: "./docs",
+    Permissions: falken.SimplePermissions{
+        AllowWriteFiles: false,
+        AllowShell:      false,
+        AllowNetwork:    false,
+    },
+})
+```
+
+Use `New` and `Session` when you need advanced runtime assembly: durable state,
+project permissions, lifecycle hooks, custom runtime providers, Plan-mode
+routing, or the full built-in tool set.
+
 ```go
 session, err := falken.New(falken.Config{
     WorkspaceDir:     "/path/to/workspace",
@@ -40,7 +79,18 @@ The normal lifecycle is:
 
 ## Configuration
 
-`WorkspaceDir` and `LLM` are required. `StateDir` is optional; when omitted Falken uses the canonical state location for the workspace. Custom tools are supplied with `ToolProviders`; Wasm tools are supplied by `falken-extra/wasmtools`, not by core path discovery.
+`WorkspaceDir` and `LLM` are required for `New`/`Session`. `StateDir` is
+optional; when omitted Falken uses the canonical state location for the
+workspace. Custom tools are supplied with `ToolProviders`; typed Go tools can be
+created with `falken.Func`, and fixed tool sets can be wrapped with
+`StaticToolProvider`. Wasm tools are supplied by `falken-extra/wasmtools`, not by
+core path discovery.
+
+`BuiltinTools` can expose all built-ins, no built-ins, or a selected subset.
+`NewAgent` uses this mechanism internally: tool-only agents expose no built-ins,
+`ReadDirectory` exposes the read-only file built-ins, and
+`SimplePermissions.AllowWriteFiles` / `AllowShell` opt into mutation and command
+tools.
 
 `ExecutionDetails` optionally customizes the command runtime. Empty execution config uses sandbox mode, image `falken-core-runtime:latest`, runtime binary `docker`, workspace mount `/workspace`, and shell `/bin/sh`.
 `ExecutionDetails.Mode` defaults to `sandbox`; sandbox mode requires a `Runtime` provider. `local` mode is available for development/testing and runs commands on the host.
@@ -112,12 +162,15 @@ The public event stream uses stable v1 event types:
 - `tool_result`
 - `command_chunk`
 - `network_request`
+- `workspace_operation`
 - `plan_routing_decision`
 - `run_completed`
 - `run_failed`
 - `thought`
 
 `thought` is best-effort diagnostic output only. Hosts should use assistant/tool/run events for correctness.
+`workspace_operation` reports managed file operation metadata without file
+contents, patches, or edit strings.
 
 `RunResult` reports the final assistant output, whether the run completed, and a terminal error string when the run failed. Recoverable tool execution problems are returned to the model as `tool_result` events/messages rather than forcing the whole run to fail.
 

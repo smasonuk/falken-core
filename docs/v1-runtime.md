@@ -4,6 +4,9 @@ This note describes the implemented v1 runtime as exposed through `pkg/falken`.
 
 ## Usage Flow
 
+This document describes the advanced `New`/`Session` runtime path. For the
+simple in-memory embedded-agent path, use `falken.NewAgent`.
+
 Hosts assemble the runtime with `falken.Config`, then use the session lifecycle:
 
 1. `falken.New(config)` validates required configuration and resolves canonical paths.
@@ -48,6 +51,8 @@ Stable v1 event types are:
 - `tool_result`: tool result returned to the model after execution or blocking.
 - `command_chunk`: shell command stdout/stderr chunk when surfaced by runtime execution.
 - `network_request`: network policy/proxy decision surfaced to hosts.
+- `workspace_operation`: managed file operation metadata without file contents,
+  patches, or edit strings.
 - `plan_routing_decision`: automatic Plan-mode routing observability payload.
 - `run_completed`: normal run completion.
 - `run_failed`: terminal run failure.

@@ -31,12 +31,13 @@ The agent uses `remoteexec.Runtime` for shell commands and
 `remoteworkspace.Client` for file operations. Core uses a virtual execution
 state for this profile: working directories are constrained lexically under the
 virtual workspace root on the agent, then the runner performs final filesystem
-validation against its real workspace. Provider and Wasm tool `CheckFileAccess`
-calls use the same virtual path resolver, so checking access to existing
-workspace files does not require the agent pod to stat `/workspace`.
-Custom provider and Wasm tools that declare workspace read or mutation
-capabilities are rejected in remote workspace mode by default; they either need
-to use managed workspace operations or be explicitly allowed by the host.
+validation against its real workspace. Provider `CheckFileAccess` calls use the
+same virtual path resolver, so checking access to existing workspace files does
+not require the agent pod to stat `/workspace`.
+Custom provider tools, including Wasm-backed adapters registered through a
+provider, that declare workspace read or mutation capabilities are rejected in
+remote workspace mode by default; they either need to use managed workspace
+operations or be explicitly allowed by the host.
 
 ## State Ownership
 
@@ -158,7 +159,7 @@ remote-runner profile is selected and the runtime provider returns both
 virtual execution state and should not instantiate local managed file
 operations.
 
-Custom tool fails in remote mode: provider or Wasm tool metadata declares
-workspace read/mutation. Convert the tool to managed workspace operations, run
-it only in local/shared-storage mode, or deliberately set
+Custom tool fails in remote mode: provider metadata declares workspace
+read/mutation. Convert the tool to managed workspace operations, run it only in
+local/shared-storage mode, or deliberately set
 `FALKEN_ALLOW_WORKSPACE_TOOLS_IN_REMOTE_MODE=true` after reviewing the risk.

@@ -25,6 +25,7 @@ This is the public API surface. Hosts should import this package rather than int
 
 Important files:
 
+* `agent_simple.go`: simple `NewAgent` wrapper for local, in-memory embedded-agent usage.
 * `session.go`: public session construction, lifecycle, run locking, state reset, and public type definitions.
 * `session_runtime.go`: internal runtime assembly for policy, command execution, file operations, background processes, sandbox adapters, and network adapters.
 * `session_agent.go`: bridges the public LLM and event interfaces to the internal agent runner.
@@ -1132,9 +1133,11 @@ Internal agent events include:
 * `run_failed`
 * `thought`
 
-Public events also include `network_request`.
+Public events also include `network_request` and `workspace_operation`.
 
 Events are bridged between internal and public shapes in `session_agent.go` and `session_tools.go`. Command output streaming uses `runtimeexec.StreamChunk`, which is converted into public `CommandChunk` events.
+Managed workspace file operations emit `workspace_operation` metadata without
+file contents, patches, or edit strings.
 
 `EventThought` is documented as best-effort only. Hosts should not depend on it for correctness.
 
