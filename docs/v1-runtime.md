@@ -28,6 +28,12 @@ Optional fields:
 
 - `StateDir`: explicit state root. Empty uses the canonical default for the workspace.
 - `ToolProviders`: host-provided native or adapter-backed tools. Wasm tools are provided by `falken-extra/wasmtools`.
+- `BuiltinTools`: selects all built-ins, no built-ins, or a named built-in subset.
+  Empty preserves the default built-in set.
+- `AllowWorkspaceToolsInRemoteMode`: permits custom provider tools that declare
+  workspace read or mutation capabilities when a runtime provider supplies
+  remote workspace file operations. The default false rejects those tools so
+  they cannot accidentally use the agent pod filesystem as the workspace.
 - `HookProviders`: host-provided session lifecycle hooks.
 - `ExecutionDetails`: optional command runtime configuration. Empty uses sandbox mode with image `falken-core-runtime:latest`, runtime binary `docker`, workspace mount `/workspace`, and shell `/bin/sh`. Local mode runs commands on the host and is intended for development/testing only.
 - `Runtime`: optional sandbox, network proxy, and network policy adapter provider. Sandbox mode requires a runtime provider.

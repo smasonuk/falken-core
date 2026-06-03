@@ -24,20 +24,18 @@ answer, err := agent.Run(ctx, "Summarize this account")
 
 `NewAgent` uses in-memory conversation state and local execution. With
 `ReadDirectory` set, it exposes read-only file tools rooted at that directory.
-Additional built-in capabilities are opt-in through `SimplePermissions`:
 
 ```go
 agent, err := falken.NewAgent(ctx, falken.AgentConfig{
     LLM:           myLLM,
     SystemPrompt:  "Answer only using the docs directory.",
     ReadDirectory: "./docs",
-    Permissions: falken.SimplePermissions{
-        AllowWriteFiles: false,
-        AllowShell:      false,
-        AllowNetwork:    false,
-    },
 })
 ```
+
+Additional built-in capabilities are opt-in through
+`SimplePermissions.AllowWriteFiles`, `SimplePermissions.AllowShell`, and
+`SimplePermissions.AllowNetwork`.
 
 Use `New` and `Session` when you need advanced runtime assembly: durable state,
 project permissions, lifecycle hooks, custom runtime providers, Plan-mode

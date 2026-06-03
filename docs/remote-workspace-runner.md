@@ -1,4 +1,4 @@
-# Remote Workspace Runner 
+# Remote Workspace Runner
 
 Lets the agent pod run without a shared `/workspace` mount. The
 agent keeps LLM/session/conversation/planning/memory/command-evidence state,
